@@ -7,7 +7,7 @@ from aivectormemory.config import get_db_path
 class ConnectionManager:
     def __init__(self, project_dir: str | None = None):
         self._db_path = get_db_path()
-        self.project_dir = str(Path(project_dir).resolve()) if project_dir else ""
+        self.project_dir = str(Path(project_dir or Path.cwd()).resolve())
         self._conn: sqlite3.Connection | None = None
 
     def _ensure_dir(self):

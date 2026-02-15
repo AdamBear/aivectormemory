@@ -312,7 +312,7 @@ def get_projects(cm):
             continue
         result.append({
             "project_dir": pd,
-            "name": pd.rsplit("/", 1)[-1] if pd else "unknown",
+            "name": pd.replace("\\", "/").rsplit("/", 1)[-1] if pd else "unknown",
             "memories": info["memories"],
             "issues": info["issues"],
             "tags": len(info["tags"]),

@@ -650,7 +650,7 @@ function enterProject(projectDir) {
   $('#app').style.display = '';
   const info = $('#sidebar-project-info');
   info.style.display = '';
-  $('#sidebar-project-name').textContent = projectDir.split('/').pop();
+  $('#sidebar-project-name').textContent = projectDir.replace(/\\/g, '/').split('/').pop();
   $$('.nav-item').forEach((el, i) => el.classList.toggle('active', i === 0));
   $$('.tab-panel').forEach(el => el.classList.remove('active'));
   $('#tab-stats').classList.add('active');
