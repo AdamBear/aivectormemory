@@ -24,6 +24,14 @@ function parseTags(v) {
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function debounce(fn, ms) { let timer; return (...a) => { clearTimeout(timer); timer = setTimeout(() => fn(...a), ms); }; }
 
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast--${type}`;
+  el.textContent = msg;
+  $('#toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
 function switchTab(tab) {
   $$('.nav-item').forEach(i => i.classList.remove('active'));
   $$('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -89,13 +97,20 @@ function pagerInfo(total, page, pages) {
   return `${t('total')} ${total} ${t('items')}，${page}/${pages} ${t('page')}`;
 }
 
+function buildPagerBtns(page, pages) {
+  if (pages <= 7) return Array.from({length: pages}, (_, i) => i + 1);
+  const s = new Set([1, pages, page]);
+  for (let d = 1; d <= 2; d++) { if (page - d > 1) s.add(page - d); if (page + d < pages) s.add(page + d); }
+  const arr = [...s].sort((a, b) => a - b), result = [];
+  arr.forEach((n, i) => { if (i > 0 && n - arr[i - 1] > 1) result.push('...'); result.push(n); });
+  return result;
+}
+
 function renderPager(containerId, page, total, onPage) {
   const pages = Math.ceil(total / PAGE_SIZE) || 1;
   if (pages <= 1) { $(containerId).innerHTML = ''; return; }
-  let btns = '';
-  for (let i = 1; i <= pages; i++) {
-    btns += `<button class="pager__btn${i === page ? ' pager__btn--active' : ''}" data-page="${i}">${i}</button>`;
-  }
+  const items = buildPagerBtns(page, pages);
+  const btns = items.map(n => n === '...' ? '<span class="pager__ellipsis">…</span>' : `<button class="pager__btn${n === page ? ' pager__btn--active' : ''}" data-page="${n}">${n}</button>`).join('');
   $(containerId).innerHTML = `<span class="pager__info">${pagerInfo(total, page, pages)}</span>${btns}`;
   $(containerId).querySelectorAll('.pager__btn').forEach(btn => {
     btn.addEventListener('click', () => onPage(parseInt(btn.dataset.page)));
@@ -139,6 +154,7 @@ window.editMemory = async (id) => {
     const newTags = $('#edit-tags').value.split(',').map(s => s.trim()).filter(Boolean);
     await api(`memories/${id}`, { method: 'PUT', body: { content, tags: newTags } });
     hideModal();
+    toast(t('memorySaved'));
     loadProjectMemories();
     loadUserMemories();
   });
@@ -147,6 +163,7 @@ window.editMemory = async (id) => {
 window.deleteMemory = async (id) => {
   if (!confirm(t('confirmDelete'))) return;
   await api(`memories/${id}`, { method: 'DELETE' });
+  toast(t('memoryDeleted'));
   loadProjectMemories();
   loadUserMemories();
 };
@@ -178,10 +195,8 @@ async function showMemoryModal(title, scope, query, page = 1, tag = null) {
 
   let pagerHtml = '';
   if (pages > 1) {
-    let btns = '';
-    for (let i = 1; i <= pages; i++) {
-      btns += `<button class="pager__btn${i === page ? ' pager__btn--active' : ''}" data-page="${i}">${i}</button>`;
-    }
+    const items = buildPagerBtns(page, pages);
+    const btns = items.map(n => n === '...' ? '<span class="pager__ellipsis">…</span>' : `<button class="pager__btn${n === page ? ' pager__btn--active' : ''}" data-page="${n}">${n}</button>`).join('');
     pagerHtml = `<div class="pager"><span class="pager__info">${pagerInfo(total, page, pages)}</span>${btns}</div>`;
   }
 
@@ -204,10 +219,8 @@ async function showIssueModal(title, status, page = 1) {
 
   let pagerHtml = '';
   if (pages > 1) {
-    let btns = '';
-    for (let i = 1; i <= pages; i++) {
-      btns += `<button class="pager__btn${i === page ? ' pager__btn--active' : ''}" data-page="${i}">${i}</button>`;
-    }
+    const items = buildPagerBtns(page, pages);
+    const btns = items.map(n => n === '...' ? '<span class="pager__ellipsis">…</span>' : `<button class="pager__btn${n === page ? ' pager__btn--active' : ''}" data-page="${n}">${n}</button>`).join('');
     pagerHtml = `<div class="pager"><span class="pager__info">${pagerInfo(total, page, pages)}</span>${btns}</div>`;
   }
 
@@ -241,6 +254,13 @@ async function loadStats() {
   ).join('');
 
   renderVectorNetwork(tagList);
+
+  const totalCount = (mem.project || 0) + (mem.user || 0) + (issues.pending || 0) + (issues.in_progress || 0) + (issues.completed || 0);
+  const oldHint = document.getElementById('empty-stats-hint');
+  if (oldHint) oldHint.remove();
+  if (totalCount === 0) {
+    $('#stats-content').insertAdjacentHTML('afterend', `<div id="empty-stats-hint" class="welcome-guide"><div class="welcome-guide__desc">${t('emptyStatsHint')}</div></div>`);
+  }
 
   $$('#stats-content .mini-card').forEach(card => {
     card.addEventListener('click', () => {
@@ -494,7 +514,7 @@ function renderTagTable() {
     <tr data-tag="${escHtml(tg.name)}">
       <td><input type="checkbox" class="tag-cell__check" ${tagSelected.has(tg.name) ? 'checked' : ''}></td>
       <td><span class="tag-cell__name">${escHtml(tg.name)}</span></td>
-      <td><span class="tag-count">${tg.count}</span></td>
+      <td><span class="tag-count">${tg.project_count ? `${tg.project_count} 📁` : ''}${tg.project_count && tg.user_count ? '  ' : ''}${tg.user_count ? `${tg.user_count} 🌐` : ''}</span></td>
       <td class="tag-actions">
         <button class="btn btn--ghost btn--sm tag-rename">${t('rename')}</button>
         <button class="btn btn--ghost btn--sm tag-view" style="color:#60A5FA">${t('view')}</button>
@@ -541,6 +561,7 @@ function renameTagAction(oldName) {
     if (!newName || newName === oldName) return;
     await api('tags/rename', { method: 'PUT', body: { old_name: oldName, new_name: newName } });
     hideModal();
+    toast(t('tagRenamed'));
     loadTags();
   });
   setTimeout(() => { const inp = $('#rename-new-name'); inp && inp.select(); }, 100);
@@ -549,6 +570,7 @@ function renameTagAction(oldName) {
 async function deleteTagAction(names) {
   if (!confirm(t('confirmDeleteTag').replace('{names}', names.join(', ')))) return;
   await api('tags/delete', { method: 'DELETE', body: { tags: names } });
+  toast(t('tagsDeleted'));
   loadTags();
 }
 
@@ -571,6 +593,7 @@ $('#tag-batch-merge')?.addEventListener('click', () => {
     if (!target) return;
     await api('tags/merge', { method: 'PUT', body: { source_tags: names, target_name: target } });
     hideModal();
+    toast(t('tagsMerged'));
     loadTags();
   });
 });
@@ -624,8 +647,12 @@ const folderIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 function loadProjects() {
   fetch('/api/projects').then(r => r.json()).then(data => {
     const grid = $('#project-grid');
-    grid.innerHTML = data.projects.map((p, i) => `
-      <div class="project-card" data-project="${escHtml(p.project_dir)}" style="animation-delay:${i * 0.05}s">
+    const addCard = `<div class="project-card project-card--add" onclick="showAddProjectModal()" style="animation-delay:0s">
+      <div class="project-card__icon project-card__icon--add"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+      <div class="project-card__name">${t('addProject')}</div>
+    </div>`;
+    const cards = data.projects.map((p, i) => `
+      <div class="project-card" data-project="${escHtml(p.project_dir)}" style="animation-delay:${(i + 1) * 0.05}s">
         <button class="project-card__delete" onclick="event.stopPropagation();deleteProject('${escHtml(p.project_dir)}','${escHtml(p.name)}')" title="${t('deleteProjectBtn')}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
         </button>
@@ -639,8 +666,14 @@ function loadProjects() {
         </div>
       </div>
     `).join('');
+    const welcome = data.projects.length === 0 ? `<div class="welcome-guide" style="grid-column:1/-1">
+      <div class="welcome-guide__title">${t('welcomeTitle')}</div>
+      <div class="welcome-guide__desc">${t('welcomeDesc').replace(/\\n/g, '<br>')}</div>
+      <div class="welcome-guide__cmd">${t('welcomeCmd')}</div>
+    </div>` : '';
+    grid.innerHTML = addCard + cards + welcome;
     $('#project-select-footer').innerHTML = `${t('footer').replace('{n}', data.projects.length)} · <a href="https://github.com/Edlineas/aivectormemory" target="_blank" rel="noopener" style="color:#6366F1;text-decoration:none">GitHub</a>`;
-    grid.querySelectorAll('.project-card').forEach(card => {
+    grid.querySelectorAll('.project-card[data-project]').forEach(card => {
       card.addEventListener('click', () => enterProject(card.dataset.project));
     });
   });
@@ -670,6 +703,46 @@ function exitProject() {
   loadProjects();
 }
 
+function showAddProjectModal() {
+  const html = `<div class="add-project-form">
+    <label>${t('projectPath')}</label>
+    <div class="add-project-input-row">
+      <input type="text" id="add-project-path" placeholder="${t('addProjectPlaceholder')}" />
+      <button class="btn-browse" onclick="browseDirs()">${t('browse')}</button>
+    </div>
+    <div id="dir-browser" class="dir-browser hidden">
+      <div id="dir-browser-path" class="dir-browser__path"></div>
+      <div id="dir-browser-list" class="dir-browser__list"></div>
+    </div>
+  </div>`;
+  showModal(t('addProjectTitle'), html, () => {
+    const path = $('#add-project-path').value.trim();
+    if (!path) return alert(t('pathRequired'));
+    fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_dir: path }) })
+      .then(r => r.json()).then(d => { if (d.success) { hideModal(); toast(t('addProjectSuccess'), 'success'); toast(t('addProjectInstallHint'), 'info'); loadProjects(); } });
+  });
+}
+
+function browseDirs(path) {
+  const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : '/api/browse';
+  fetch(url).then(r => r.json()).then(data => {
+    if (data.error) return;
+    const browser = $('#dir-browser');
+    browser.classList.remove('hidden');
+    $('#add-project-path').value = data.path;
+    $('#dir-browser-path').textContent = data.path;
+    const parentPath = data.path.replace(/\/[^/]+\/?$/, '') || '/';
+    const items = [`<div class="dir-browser__item dir-browser__item--parent" onclick="browseDirs('${escHtml(parentPath)}')">⬆ ${t('parentDir')}</div>`];
+    data.dirs.forEach(d => {
+      const full = data.path.replace(/\/$/, '') + '/' + d;
+      items.push(`<div class="dir-browser__item" onclick="event.stopPropagation();$('#add-project-path').value='${escHtml(full)}';browseDirs('${escHtml(full)}')">${escHtml(d)}</div>`);
+    });
+    $('#dir-browser-list').innerHTML = items.join('');
+  });
+}
+window.showAddProjectModal = showAddProjectModal;
+window.browseDirs = browseDirs;
+
 window.deleteProject = function(projectDir, name) {
   if (!confirm(t('confirmDeleteProject').replace('{name}', name))) return;
   fetch('/api/projects/' + encodeURIComponent(projectDir), { method: 'DELETE' })
@@ -679,6 +752,37 @@ window.deleteProject = function(projectDir, name) {
 
 
 $('#sidebar-project-info')?.addEventListener('click', exitProject);
+
+// 导出
+$('#btn-export')?.addEventListener('click', async () => {
+  const data = await api('export?scope=project');
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `aivectormemory-export-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(t('exportSuccess'));
+});
+
+// 导入
+$('#btn-import')?.addEventListener('click', () => $('#import-file').click());
+$('#import-file')?.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const body = JSON.parse(text);
+    const res = await api('import', { method: 'POST', body });
+    if (res.imported !== undefined) {
+      toast(t('importSuccess').replace('{n}', res.imported));
+      loadProjectMemories();
+    } else {
+      toast(t('importFailed'), 'error');
+    }
+  } catch { toast(t('importFailed'), 'error'); }
+  e.target.value = '';
+});
 
 // 初始化
 setLang(currentLang);

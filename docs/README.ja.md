@@ -35,6 +35,8 @@
 | 🔐 **Web認証** | ダッシュボードがToken認証をサポート、不正アクセスを防止 |
 | ⚡ **Embeddingキャッシュ** | 同一コンテンツの冗長なベクトル計算なし、書き込み高速化 |
 | 📤 **エクスポート/インポート** | 記憶データのJSONエクスポート・インポート、移行とバックアップをサポート |
+| 🎯 **操作フィードバック** | Toast通知、空状態ガイド、完全なインタラクション体験 |
+| ➕ **プロジェクト追加** | ダッシュボードから直接プロジェクトを追加、ディレクトリブラウザ対応 |
 
 ## 🏗️ アーキテクチャ
 
@@ -217,12 +219,12 @@ AIVectorMemoryはストレージ層です。Steeringルールを使ってAIに**
 | IDE | Steeringの場所 | Hooks |
 |-----|---------------|-------|
 | Kiro | `.kiro/steering/aivectormemory.md` | `.kiro/hooks/*.hook` |
-| Cursor | `.cursor/rules/aivectormemory.md` | — |
-| Claude Code | `CLAUDE.md`（追記） | — |
-| Windsurf | `.windsurf/rules/aivectormemory.md` | — |
+| Cursor | `.cursor/rules/aivectormemory.md` | `.cursor/hooks.json` |
+| Claude Code | `CLAUDE.md`（追記） | `.claude/settings.json` |
+| Windsurf | `.windsurf/rules/aivectormemory.md` | `.windsurf/hooks.json` |
 | VSCode | `.github/copilot-instructions.md`（追記） | — |
 | Trae | `.trae/rules/aivectormemory.md` | — |
-| OpenCode | `AGENTS.md`（追記） | — |
+| OpenCode | `AGENTS.md`（追記） | `.opencode/plugins/*.js` |
 
 <details>
 <summary>📋 Steeringルール例（自動生成）</summary>
@@ -324,6 +326,18 @@ export HF_ENDPOINT=https://hf-mirror.com
 | Web | ネイティブHTTPServer + Vanilla JS |
 
 ## 📋 更新履歴
+
+### v0.2.1
+
+- ➕ Webダッシュボードからプロジェクト追加（ディレクトリブラウザ + 手動入力）
+- 🏷️ タグのプロジェクト間汚染修正（タグ操作を現在のプロジェクト + グローバル記憶に限定）
+- 📐 モーダルページネーション省略記号切り詰め + 幅80%
+- 🔌 OpenCode installがauto_saveプラグインを自動生成（session.idleイベントトリガー）
+- 🔗 Claude Code / Cursor / Windsurf installがHooks設定を自動生成（セッション終了時の自動保存）
+- 🎯 Webダッシュボード操作体験改善（Toastフィードバック、空状態ガイド、エクスポート/インポートツールバー）
+- 🔧 統計カードクリックジャンプ（記憶数/問題数クリックで詳細表示）
+- 🏷️ タグ管理ページでプロジェクト/グローバルタグの出所を区別（📁/🌐 マーカー）
+- 🏷️ プロジェクトカードのタグ数にグローバル記憶のタグを統合
 
 ### v0.2.0
 

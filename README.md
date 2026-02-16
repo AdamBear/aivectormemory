@@ -35,6 +35,8 @@
 | 🔐 **Web 认证** | 看板支持 Token 认证，防止未授权访问 |
 | ⚡ **Embedding 缓存** | 相同内容不重复计算向量，提升写入性能 |
 | 📤 **导出/导入** | 记忆数据 JSON 导出导入，支持迁移和备份 |
+| 🎯 **操作反馈** | Toast 提示、空状态引导，交互体验完整 |
+| ➕ **看板添加项目** | 前端直接添加项目，支持目录浏览器选择 |
 
 ## 🏗️ 架构
 
@@ -226,12 +228,12 @@ AIVectorMemory 是存储层，通过 Steering 规则告诉 AI **何时、如何*
 | IDE | Steering 位置 | Hooks |
 |-----|--------------|-------|
 | Kiro | `.kiro/steering/aivectormemory.md` | `.kiro/hooks/*.hook` |
-| Cursor | `.cursor/rules/aivectormemory.md` | — |
-| Claude Code | `CLAUDE.md`（追加） | — |
-| Windsurf | `.windsurf/rules/aivectormemory.md` | — |
+| Cursor | `.cursor/rules/aivectormemory.md` | `.cursor/hooks.json` |
+| Claude Code | `CLAUDE.md`（追加） | `.claude/settings.json` |
+| Windsurf | `.windsurf/rules/aivectormemory.md` | `.windsurf/hooks.json` |
 | VSCode | `.github/copilot-instructions.md`（追加） | — |
 | Trae | `.trae/rules/aivectormemory.md` | — |
-| OpenCode | `AGENTS.md`（追加） | — |
+| OpenCode | `AGENTS.md`（追加） | `.opencode/plugins/*.js` |
 
 <details>
 <summary>📋 Steering 规则范例（自动生成）</summary>
@@ -333,6 +335,18 @@ export HF_ENDPOINT=https://hf-mirror.com
 | Web | 原生 HTTPServer + Vanilla JS |
 
 ## 📋 更新日志
+
+### v0.2.1
+
+- ➕ Web 看板前端添加项目（目录浏览器 + 手动输入）
+- 🏷️ 标签跨项目污染修复（标签操作限定当前项目 + 全局记忆范围）
+- 📐 弹窗分页省略号截断 + 弹窗宽度 80%
+- 🔌 OpenCode install 自动生成 auto_save 插件（session.idle 事件触发）
+- 🔗 Claude Code / Cursor / Windsurf install 自动生成 Hooks 配置（会话结束自动保存）
+- 🎯 Web 看板交互体验补全（Toast 操作反馈、空状态引导、导出/导入工具栏）
+- 🔧 统计概览卡片点击跳转（点击记忆数/问题数直接弹窗查看）
+- 🏷️ 标签管理页区分项目/全局标签来源（📁/🌐 标记）
+- 🏷️ 项目卡片标签数合并全局记忆标签
 
 ### v0.2.0
 

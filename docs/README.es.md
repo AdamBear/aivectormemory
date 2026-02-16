@@ -35,6 +35,8 @@
 | 🔐 **Autenticación Web** | El panel soporta autenticación por Token para prevenir acceso no autorizado |
 | ⚡ **Caché de Embedding** | Sin cálculo vectorial redundante para contenido idéntico, escrituras más rápidas |
 | 📤 **Exportar/Importar** | Exportación e importación de datos de memoria en JSON, soporta migración y respaldo |
+| 🎯 **Retroalimentación** | Notificaciones Toast, guías de estado vacío, experiencia de interacción completa |
+| ➕ **Agregar Proyectos** | Agregar proyectos directamente desde el panel con explorador de directorios |
 
 ## 🏗️ Arquitectura
 
@@ -217,12 +219,12 @@ Ejecutar `run install` genera automáticamente las reglas Steering y la configur
 | IDE | Ubicación de Steering | Hooks |
 |-----|----------------------|-------|
 | Kiro | `.kiro/steering/aivectormemory.md` | `.kiro/hooks/*.hook` |
-| Cursor | `.cursor/rules/aivectormemory.md` | — |
-| Claude Code | `CLAUDE.md` (añadido) | — |
-| Windsurf | `.windsurf/rules/aivectormemory.md` | — |
+| Cursor | `.cursor/rules/aivectormemory.md` | `.cursor/hooks.json` |
+| Claude Code | `CLAUDE.md` (añadido) | `.claude/settings.json` |
+| Windsurf | `.windsurf/rules/aivectormemory.md` | `.windsurf/hooks.json` |
 | VSCode | `.github/copilot-instructions.md` (añadido) | — |
 | Trae | `.trae/rules/aivectormemory.md` | — |
-| OpenCode | `AGENTS.md` (añadido) | — |
+| OpenCode | `AGENTS.md` (añadido) | `.opencode/plugins/*.js` |
 
 <details>
 <summary>📋 Ejemplo de Reglas Steering (generado automáticamente)</summary>
@@ -324,6 +326,18 @@ O agregar env en la configuración MCP:
 | Web | HTTPServer nativo + Vanilla JS |
 
 ## 📋 Registro de Cambios
+
+### v0.2.1
+
+- ➕ Agregar proyectos desde el panel Web (explorador de directorios + entrada manual)
+- 🏷️ Corrección de contaminación de etiquetas entre proyectos (operaciones limitadas al proyecto actual + memorias globales)
+- 📐 Truncamiento con puntos suspensivos en paginación de modales + ancho 80%
+- 🔌 OpenCode install genera automáticamente plugin auto_save (evento session.idle)
+- 🔗 Claude Code / Cursor / Windsurf install genera automáticamente configuración de Hooks (guardado automático al finalizar sesión)
+- 🎯 Mejoras de UX del panel Web (retroalimentación Toast, guías de estado vacío, barra de exportar/importar)
+- 🔧 Clic en tarjetas de estadísticas (clic en conteos de memoria/problemas para ver detalles)
+- 🏷️ Página de gestión de etiquetas distingue origen proyecto/global (marcadores 📁/🌐)
+- 🏷️ Conteo de etiquetas en tarjetas de proyecto incluye etiquetas de memorias globales
 
 ### v0.2.0
 

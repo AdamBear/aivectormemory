@@ -35,6 +35,8 @@
 | 🔐 **Web Auth** | Dashboard supports Token authentication to prevent unauthorized access |
 | ⚡ **Embedding Cache** | No redundant vector computation for identical content, faster writes |
 | 📤 **Export/Import** | Memory data JSON export and import, supports migration and backup |
+| 🎯 **Action Feedback** | Toast notifications, empty state guides, complete interaction experience |
+| ➕ **Add Projects** | Add projects directly from dashboard with directory browser |
 
 ## 🏗️ Architecture
 
@@ -217,12 +219,12 @@ Running `run install` auto-generates Steering rules and Hooks config — no manu
 | IDE | Steering Location | Hooks |
 |-----|------------------|-------|
 | Kiro | `.kiro/steering/aivectormemory.md` | `.kiro/hooks/*.hook` |
-| Cursor | `.cursor/rules/aivectormemory.md` | — |
-| Claude Code | `CLAUDE.md` (appended) | — |
-| Windsurf | `.windsurf/rules/aivectormemory.md` | — |
+| Cursor | `.cursor/rules/aivectormemory.md` | `.cursor/hooks.json` |
+| Claude Code | `CLAUDE.md` (appended) | `.claude/settings.json` |
+| Windsurf | `.windsurf/rules/aivectormemory.md` | `.windsurf/hooks.json` |
 | VSCode | `.github/copilot-instructions.md` (appended) | — |
 | Trae | `.trae/rules/aivectormemory.md` | — |
-| OpenCode | `AGENTS.md` (appended) | — |
+| OpenCode | `AGENTS.md` (appended) | `.opencode/plugins/*.js` |
 
 <details>
 <summary>📋 Steering Rules Example (auto-generated)</summary>
@@ -324,6 +326,18 @@ Or add env to MCP config:
 | Web | Native HTTPServer + Vanilla JS |
 
 ## 📋 Changelog
+
+### v0.2.1
+
+- ➕ Add projects from Web dashboard (directory browser + manual input)
+- 🏷️ Fix tag cross-project pollution (tag operations scoped to current project + global memories)
+- 📐 Modal pagination ellipsis truncation + 80% width
+- 🔌 OpenCode install auto-generates auto_save plugin (session.idle event trigger)
+- 🔗 Claude Code / Cursor / Windsurf install auto-generates Hooks config (auto-save on session end)
+- 🎯 Web dashboard UX improvements (Toast feedback, empty state guides, export/import toolbar)
+- 🔧 Stats card click-through (click memory/issue counts to view details)
+- 🏷️ Tag management page distinguishes project/global tag sources (📁/🌐 markers)
+- 🏷️ Project card tag counts now include global memory tags
 
 ### v0.2.0
 

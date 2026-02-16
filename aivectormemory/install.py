@@ -11,17 +11,21 @@ IDES = [
      lambda root: root / ".kiro/steering/aivectormemory.md", "file",
      lambda root: root / ".kiro/hooks"),
     ("Cursor",         lambda root: root / ".cursor/mcp.json",         "standard", False,
-     lambda root: root / ".cursor/rules/aivectormemory.md", "file", None),
+     lambda root: root / ".cursor/rules/aivectormemory.md", "file",
+     lambda root: root / ".cursor"),
     ("Claude Code",    lambda root: root / ".mcp.json",                "standard", False,
-     lambda root: root / "CLAUDE.md", "append", None),
+     lambda root: root / "CLAUDE.md", "append",
+     lambda root: root / ".claude"),
     ("Windsurf",       lambda root: root / ".windsurf/mcp.json",       "standard", False,
-     lambda root: root / ".windsurf/rules/aivectormemory.md", "file", None),
+     lambda root: root / ".windsurf/rules/aivectormemory.md", "file",
+     lambda root: root / ".windsurf"),
     ("VSCode",         lambda root: root / ".vscode/mcp.json",         "standard", False,
      lambda root: root / ".github/copilot-instructions.md", "append", None),
     ("Trae",           lambda root: root / ".trae/mcp.json",           "standard", False,
      lambda root: root / ".trae/rules/aivectormemory.md", "file", None),
     ("OpenCode",       lambda root: root / "opencode.json",            "opencode", False,
-     lambda root: root / "AGENTS.md", "append", None),
+     lambda root: root / "AGENTS.md", "append",
+     lambda root: root / ".opencode/plugins"),
     ("Claude Desktop", lambda _: _claude_desktop_path(),               "standard", True,
      None, None, None),
 ]
@@ -421,6 +425,141 @@ HOOKS_CONFIGS = [
 ]
 
 
+AUTO_SAVE_PROMPT = (
+    "Check the conversation: was auto_save (mcp_aivectormemory_auto_save or aivectormemory auto_save) "
+    "already called? If yes, respond {\"ok\": true}. If not, respond {\"ok\": false, \"reason\": "
+    "\"Call auto_save to save this session: decisions, modifications, pitfalls, todos, preferences. "
+    "Each item must be specific. Empty categories use empty arrays. "
+    "scope defaults to project (preferences fixed to user).\"}"
+)
+
+CLAUDE_CODE_HOOKS_CONFIG = {
+    "hooks": {
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "prompt",
+                        "prompt": AUTO_SAVE_PROMPT + "\n\nContext: $ARGUMENTS",
+                        "timeout": 30,
+                    }
+                ]
+            }
+        ]
+    }
+}
+
+CURSOR_HOOKS_CONFIG = {
+    "version": 1,
+    "hooks": {
+        "stop": [
+            {
+                "command": "echo 'Please call auto_save (mcp_aivectormemory_auto_save) to save this session: decisions, modifications, pitfalls, todos, preferences. Each item must be specific. Empty categories use empty arrays.' >&2; exit 2",
+            }
+        ]
+    }
+}
+
+WINDSURF_HOOKS_CONFIG = {
+    "hooks": {
+        "post_cascade_response": [
+            {
+                "command": "echo 'Reminder: call auto_save to save session data if not done yet.' >&2; exit 0",
+                "show_output": False,
+            }
+        ]
+    }
+}
+
+
+OPENCODE_PLUGIN_CONTENT = """\
+// AIVectorMemory auto-save plugin for OpenCode
+// Listens to session.idle event and triggers auto_save via MCP
+export default {
+  name: "aivectormemory-auto-save",
+  version: "1.0.0",
+  subscribe: ["session.idle"],
+  async onEvent(event, { client }) {
+    if (event.type !== "session.idle") return;
+    await client.send(
+      "Please call mcp_aivectormemory_auto_save to save this session's key information: " +
+      "decisions, modifications, pitfalls, todos, preferences. " +
+      "Each item must be specific and traceable. Empty categories use empty arrays. " +
+      "scope defaults to project (preferences fixed to user)."
+    );
+  },
+};
+"""
+
+
+def _write_claude_code_hooks(hooks_dir: Path) -> list[str]:
+    """写入 Claude Code hooks 到 .claude/settings.json"""
+    results = []
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    filepath = hooks_dir / "settings.json"
+    config = {}
+    if filepath.exists():
+        try:
+            config = json.loads(filepath.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            config = {}
+    existing_hooks = config.get("hooks", {}).get("Stop", [])
+    new_hooks = CLAUDE_CODE_HOOKS_CONFIG["hooks"]["Stop"]
+    if existing_hooks == new_hooks:
+        results.append("- 无变更  Hook: .claude/settings.json (Stop)")
+    else:
+        config.setdefault("hooks", {})
+        config["hooks"]["Stop"] = new_hooks
+        filepath.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        results.append("✓ 已生成  Hook: .claude/settings.json (Stop)")
+    return results
+
+
+def _write_cursor_hooks(hooks_dir: Path) -> list[str]:
+    """写入 Cursor hooks 到 .cursor/hooks.json"""
+    results = []
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    filepath = hooks_dir / "hooks.json"
+    new_content = json.dumps(CURSOR_HOOKS_CONFIG, indent=2, ensure_ascii=False) + "\n"
+    if filepath.exists():
+        existing = filepath.read_text("utf-8")
+        if existing.strip() == new_content.strip():
+            results.append("- 无变更  Hook: .cursor/hooks.json (stop)")
+            return results
+    filepath.write_text(new_content, encoding="utf-8")
+    results.append("✓ 已生成  Hook: .cursor/hooks.json (stop)")
+    return results
+
+
+def _write_windsurf_hooks(hooks_dir: Path) -> list[str]:
+    """写入 Windsurf hooks 到 .windsurf/hooks.json"""
+    results = []
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    filepath = hooks_dir / "hooks.json"
+    new_content = json.dumps(WINDSURF_HOOKS_CONFIG, indent=2, ensure_ascii=False) + "\n"
+    if filepath.exists():
+        existing = filepath.read_text("utf-8")
+        if existing.strip() == new_content.strip():
+            results.append("- 无变更  Hook: .windsurf/hooks.json (post_cascade_response)")
+            return results
+    filepath.write_text(new_content, encoding="utf-8")
+    results.append("✓ 已生成  Hook: .windsurf/hooks.json (post_cascade_response)")
+    return results
+
+
+def _write_opencode_plugins(plugins_dir: Path) -> list[str]:
+    """写入 OpenCode 插件文件，返回变更列表"""
+    results = []
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    filepath = plugins_dir / "aivectormemory-auto-save.js"
+    if filepath.exists() and filepath.read_text("utf-8").strip() == OPENCODE_PLUGIN_CONTENT.strip():
+        results.append("- 无变更  Plugin: aivectormemory-auto-save.js")
+    else:
+        filepath.write_text(OPENCODE_PLUGIN_CONTENT, encoding="utf-8")
+        results.append("✓ 已生成  Plugin: aivectormemory-auto-save.js")
+    return results
+
+
 def _write_hooks(hooks_dir: Path) -> list[str]:
     """写入 hook 文件到指定目录，返回变更列表"""
     results = []
@@ -568,11 +707,38 @@ def run_install(project_dir: str | None = None):
             s_status = "✓ 已生成" if s_changed else "- 无变更"
             print(f"  {s_status}  {label} Steering 规则 → {steering_path.relative_to(root)}")
 
-        # 5. 写入 Hooks
+        # 5. 写入 Hooks / Plugins
         if hooks_fn:
             hooks_dir = hooks_fn(root)
-            hook_results = _write_hooks(hooks_dir)
+            hooks_dir_str = str(hooks_dir)
+            if hooks_dir_str.endswith(".opencode/plugins"):
+                hook_results = _write_opencode_plugins(hooks_dir)
+            elif hooks_dir_str.endswith(".claude"):
+                hook_results = _write_claude_code_hooks(hooks_dir)
+            elif hooks_dir_str.endswith(".cursor"):
+                hook_results = _write_cursor_hooks(hooks_dir)
+            elif hooks_dir_str.endswith(".windsurf"):
+                hook_results = _write_windsurf_hooks(hooks_dir)
+            else:
+                hook_results = _write_hooks(hooks_dir)
             for r in hook_results:
                 print(f"  {r}")
 
     print("\n安装完成，重启 IDE 即可使用")
+
+    # 6. 注册项目到数据库（Web 看板可见）
+    try:
+        from aivectormemory.db.connection import ConnectionManager
+        from aivectormemory.db.schema import init_db
+        cm = ConnectionManager(pdir)
+        init_db(cm.conn)
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        cm.conn.execute(
+            "INSERT OR IGNORE INTO session_state (project_dir, is_blocked, block_reason, next_step, current_task, progress, recent_changes, pending, updated_at) VALUES (?,0,'','','','[]','[]','[]',?)",
+            (pdir, now)
+        )
+        cm.conn.commit()
+        cm.close()
+    except Exception:
+        pass

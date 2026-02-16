@@ -27,10 +27,12 @@ def handle_api_request(handler, cm):
             "/api/tags": lambda: get_tags(cm, params, pdir),
             "/api/projects": lambda: get_projects(cm),
             "/api/export": lambda: export_memories(cm, params, pdir),
+            "/api/browse": lambda: browse_directory(params),
         },
         "POST": {
             "/api/import": lambda: import_memories(handler, cm, pdir),
             "/api/search": lambda: search_memories(handler, cm, pdir),
+            "/api/projects": lambda: add_project(handler, cm),
         },
         "PUT": {
             "/api/status": lambda: put_status(handler, cm, pdir),
@@ -181,6 +183,22 @@ def put_issue(handler, cm, iid, pdir):
     return result or {"error": "not found"}
 
 
+def _merged_tag_counts(repo, pdir):
+    proj = repo.get_tag_counts(project_dir=pdir)
+    user = repo.get_tag_counts(project_dir=USER_SCOPE_DIR)
+    merged = dict(proj)
+    for k, v in user.items():
+        merged[k] = merged.get(k, 0) + v
+    return merged
+
+
+def _merged_ids_with_tag(repo, tag, pdir):
+    proj = repo.get_ids_with_tag(tag, project_dir=pdir)
+    user = repo.get_ids_with_tag(tag, project_dir=USER_SCOPE_DIR)
+    seen = {m["id"] for m in proj}
+    return proj + [m for m in user if m["id"] not in seen]
+
+
 def get_stats(cm, pdir):
     repo = MemoryRepo(cm.conn, pdir)
     issue_repo = IssueRepo(cm.conn, pdir)
@@ -197,7 +215,7 @@ def get_stats(cm, pdir):
     archived_issues = issue_repo.list_archived()
     status_counts["archived"] = len(archived_issues)
 
-    tag_counts = repo.get_tag_counts()
+    tag_counts = _merged_tag_counts(repo, pdir)
 
     return {
         "memories": {"project": proj_count, "user": user_count, "total": total_count},
@@ -209,8 +227,11 @@ def get_stats(cm, pdir):
 def get_tags(cm, params, pdir):
     query = params.get("query", [None])[0]
     repo = MemoryRepo(cm.conn, pdir)
-    tag_counts = repo.get_tag_counts()
-    tags = [{"name": k, "count": v} for k, v in sorted(tag_counts.items(), key=lambda x: -x[1])]
+    proj = repo.get_tag_counts(project_dir=pdir)
+    user = repo.get_tag_counts(project_dir=USER_SCOPE_DIR)
+    all_names = sorted(set(proj) | set(user), key=lambda k: -(proj.get(k, 0) + user.get(k, 0)))
+    tags = [{"name": k, "count": proj.get(k, 0) + user.get(k, 0),
+             "project_count": proj.get(k, 0), "user_count": user.get(k, 0)} for k in all_names]
     if query:
         q = query.lower()
         tags = [t for t in tags if q in t["name"].lower()]
@@ -225,7 +246,7 @@ def rename_tag(handler, cm, pdir):
         return {"error": "old_name and new_name required"}
     repo = MemoryRepo(cm.conn, pdir)
     updated = 0
-    for m in repo.get_ids_with_tag(old_name):
+    for m in _merged_ids_with_tag(repo, old_name, pdir):
         tags = json.loads(m["tags"]) if isinstance(m.get("tags"), str) else m.get("tags", [])
         tags = [new_name if t == old_name else t for t in tags]
         tags = list(dict.fromkeys(tags))
@@ -246,7 +267,7 @@ def merge_tags(handler, cm, pdir):
     updated = 0
     seen = set()
     for src in source_tags:
-        for m in repo.get_ids_with_tag(src):
+        for m in _merged_ids_with_tag(repo, src, pdir):
             if m["id"] in seen:
                 continue
             seen.add(m["id"])
@@ -269,7 +290,7 @@ def delete_tags(handler, cm, pdir):
     updated = 0
     seen = set()
     for tn in tag_names:
-        for m in repo.get_ids_with_tag(tn):
+        for m in _merged_ids_with_tag(repo, tn, pdir):
             if m["id"] in seen:
                 continue
             seen.add(m["id"])
@@ -309,12 +330,19 @@ def get_projects(cm):
         projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tags": set()})
         projects[pd]["issues"] += r["cnt"]
 
+    state_rows = conn.execute("SELECT project_dir FROM session_state").fetchall()
+    for r in state_rows:
+        pd = r["project_dir"]
+        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tags": set()})
+
     tag_rows = conn.execute("SELECT project_dir, tags FROM memories").fetchall()
     for r in tag_rows:
         pd = r["project_dir"]
         if pd in projects:
             tags = json.loads(r["tags"]) if isinstance(r["tags"], str) else (r["tags"] or [])
             projects[pd]["tags"].update(tags)
+
+    user_tags = projects.get(USER_SCOPE_DIR, {}).get("tags", set())
 
     result = []
     for pd, info in sorted(projects.items(), key=lambda x: -x[1]["memories"]):
@@ -325,9 +353,43 @@ def get_projects(cm):
             "name": pd.replace("\\", "/").rsplit("/", 1)[-1] if pd else "unknown",
             "memories": info["memories"],
             "issues": info["issues"],
-            "tags": len(info["tags"]),
+            "tags": len(info["tags"] | user_tags),
         })
     return {"projects": result}
+
+
+def add_project(handler, cm):
+    body = _read_body(handler)
+    project_dir = (body.get("project_dir") or "").strip()
+    if not project_dir:
+        return {"error": "project_dir is required"}
+    project_dir = project_dir.replace("\\", "/")
+    conn = cm.conn
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    conn.execute(
+        "INSERT OR IGNORE INTO session_state (project_dir, is_blocked, block_reason, next_step, current_task, progress, recent_changes, pending, updated_at) VALUES (?,0,'','','','[]','[]','[]',?)",
+        (project_dir, now)
+    )
+    conn.commit()
+    return {"success": True, "project_dir": project_dir}
+
+
+def browse_directory(params):
+    import os
+    path = (params.get("path", [None])[0] or "").strip()
+    if not path:
+        path = os.path.expanduser("~")
+    path = os.path.expanduser(path)
+    if not os.path.isdir(path):
+        return {"error": "not a directory", "path": path}
+    dirs = []
+    try:
+        for entry in sorted(os.scandir(path), key=lambda e: e.name.lower()):
+            if entry.is_dir() and not entry.name.startswith("."):
+                dirs.append(entry.name)
+    except PermissionError:
+        return {"error": "permission denied", "path": path}
+    return {"path": path.replace("\\", "/"), "dirs": dirs}
 
 def delete_project(cm, project_dir):
     if not project_dir or project_dir == USER_SCOPE_DIR:

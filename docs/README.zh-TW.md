@@ -35,6 +35,8 @@
 | 🔐 **Web 認證** | 看板支援 Token 認證，防止未授權存取 |
 | ⚡ **Embedding 快取** | 相同內容不重複計算向量，提升寫入效能 |
 | 📤 **匯出/匯入** | 記憶資料 JSON 匯出匯入，支援遷移和備份 |
+| 🎯 **操作回饋** | Toast 提示、空狀態引導，互動體驗完整 |
+| ➕ **看板新增專案** | 前端直接新增專案，支援目錄瀏覽器選擇 |
 
 ## 🏗️ 架構
 
@@ -217,12 +219,12 @@ AIVectorMemory 是儲存層，透過 Steering 規則告訴 AI **何時、如何*
 | IDE | Steering 位置 | Hooks |
 |-----|--------------|-------|
 | Kiro | `.kiro/steering/aivectormemory.md` | `.kiro/hooks/*.hook` |
-| Cursor | `.cursor/rules/aivectormemory.md` | — |
-| Claude Code | `CLAUDE.md`（追加） | — |
-| Windsurf | `.windsurf/rules/aivectormemory.md` | — |
+| Cursor | `.cursor/rules/aivectormemory.md` | `.cursor/hooks.json` |
+| Claude Code | `CLAUDE.md`（追加） | `.claude/settings.json` |
+| Windsurf | `.windsurf/rules/aivectormemory.md` | `.windsurf/hooks.json` |
 | VSCode | `.github/copilot-instructions.md`（追加） | — |
 | Trae | `.trae/rules/aivectormemory.md` | — |
-| OpenCode | `AGENTS.md`（追加） | — |
+| OpenCode | `AGENTS.md`（追加） | `.opencode/plugins/*.js` |
 
 <details>
 <summary>📋 Steering 規則範例（自動產生）</summary>
@@ -324,6 +326,18 @@ export HF_ENDPOINT=https://hf-mirror.com
 | Web | 原生 HTTPServer + Vanilla JS |
 
 ## 📋 更新日誌
+
+### v0.2.1
+
+- ➕ 看板前端新增專案（目錄瀏覽器 + 手動輸入）
+- 🏷️ 標籤跨專案污染修復（標籤操作限定當前專案 + 全域記憶範圍）
+- 📐 彈窗分頁省略號截斷 + 寬度 80%
+- 🔌 OpenCode install 自動生成 auto_save 外掛（session.idle 事件觸發）
+- 🔗 Claude Code / Cursor / Windsurf install 自動生成 Hooks 設定（會話結束自動儲存）
+- 🎯 看板互動體驗補全（Toast 回饋、空狀態引導、匯出/匯入工具列）
+- 🔧 統計概覽卡片點擊跳轉（點擊記憶數/問題數直接彈窗查看）
+- 🏷️ 標籤管理頁區分專案/全域標籤來源（📁/🌐 標記）
+- 🏷️ 專案卡片標籤數合併全域記憶標籤
 
 ### v0.2.0
 

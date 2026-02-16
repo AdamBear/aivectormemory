@@ -35,6 +35,8 @@
 | 🔐 **Web-Authentifizierung** | Dashboard unterstützt Token-Authentifizierung gegen unbefugten Zugriff |
 | ⚡ **Embedding-Cache** | Keine redundante Vektorberechnung für identische Inhalte, schnellere Schreibvorgänge |
 | 📤 **Export/Import** | Erinnerungsdaten JSON-Export und -Import, unterstützt Migration und Backup |
+| 🎯 **Aktions-Feedback** | Toast-Benachrichtigungen, Leerstandsführungen, vollständige Interaktionserfahrung |
+| ➕ **Projekte hinzufügen** | Projekte direkt vom Dashboard mit Verzeichnis-Browser hinzufügen |
 
 ## 🏗️ Architektur
 
@@ -217,12 +219,12 @@ AIVectorMemory ist die Speicherschicht. Verwende Steering-Regeln, um der KI mitz
 | IDE | Steering-Pfad | Hooks |
 |-----|--------------|-------|
 | Kiro | `.kiro/steering/aivectormemory.md` | `.kiro/hooks/*.hook` |
-| Cursor | `.cursor/rules/aivectormemory.md` | — |
-| Claude Code | `CLAUDE.md` (angehängt) | — |
-| Windsurf | `.windsurf/rules/aivectormemory.md` | — |
+| Cursor | `.cursor/rules/aivectormemory.md` | `.cursor/hooks.json` |
+| Claude Code | `CLAUDE.md` (angehängt) | `.claude/settings.json` |
+| Windsurf | `.windsurf/rules/aivectormemory.md` | `.windsurf/hooks.json` |
 | VSCode | `.github/copilot-instructions.md` (angehängt) | — |
 | Trae | `.trae/rules/aivectormemory.md` | — |
-| OpenCode | `AGENTS.md` (angehängt) | — |
+| OpenCode | `AGENTS.md` (angehängt) | `.opencode/plugins/*.js` |
 
 <details>
 <summary>📋 Steering-Regeln Beispiel (automatisch generiert)</summary>
@@ -324,6 +326,18 @@ Oder env in der MCP-Konfiguration hinzufügen:
 | Web | Nativer HTTPServer + Vanilla JS |
 
 ## 📋 Änderungsprotokoll
+
+### v0.2.1
+
+- ➕ Projekte vom Web-Dashboard hinzufügen (Verzeichnis-Browser + manuelle Eingabe)
+- 🏷️ Tag-Kreuzkontamination behoben (Tag-Operationen auf aktuelles Projekt + globale Erinnerungen beschränkt)
+- 📐 Modal-Paginierung mit Auslassungszeichen + 80% Breite
+- 🔌 OpenCode install generiert automatisch auto_save-Plugin (session.idle Event-Trigger)
+- 🔗 Claude Code / Cursor / Windsurf install generiert automatisch Hooks-Konfiguration (automatisches Speichern bei Sitzungsende)
+- 🎯 Web-Dashboard UX-Verbesserungen (Toast-Feedback, Leerstandsführungen, Export/Import-Toolbar)
+- 🔧 Statistik-Karten Klick-Navigation (Klick auf Erinnerungs-/Problemzähler für Details)
+- 🏷️ Tag-Verwaltungsseite unterscheidet Projekt-/Globale Tag-Quellen (📁/🌐 Markierungen)
+- 🏷️ Projekt-Karten Tag-Anzahl enthält jetzt globale Erinnerungs-Tags
 
 ### v0.2.0
 

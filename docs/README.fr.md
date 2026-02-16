@@ -35,6 +35,8 @@
 | 🔐 **Authentification Web** | Le tableau de bord supporte l'authentification par Token contre les accès non autorisés |
 | ⚡ **Cache Embedding** | Pas de calcul vectoriel redondant pour un contenu identique, écritures plus rapides |
 | 📤 **Export/Import** | Export et import des données mémoire en JSON, supporte la migration et la sauvegarde |
+| 🎯 **Retour d'action** | Notifications Toast, guides d'état vide, expérience d'interaction complète |
+| ➕ **Ajouter des projets** | Ajouter des projets directement depuis le tableau de bord avec navigateur de répertoires |
 
 ## 🏗️ Architecture
 
@@ -217,12 +219,12 @@ L'exécution de `run install` génère automatiquement les règles Steering et l
 | IDE | Emplacement Steering | Hooks |
 |-----|---------------------|-------|
 | Kiro | `.kiro/steering/aivectormemory.md` | `.kiro/hooks/*.hook` |
-| Cursor | `.cursor/rules/aivectormemory.md` | — |
-| Claude Code | `CLAUDE.md` (ajouté) | — |
-| Windsurf | `.windsurf/rules/aivectormemory.md` | — |
+| Cursor | `.cursor/rules/aivectormemory.md` | `.cursor/hooks.json` |
+| Claude Code | `CLAUDE.md` (ajouté) | `.claude/settings.json` |
+| Windsurf | `.windsurf/rules/aivectormemory.md` | `.windsurf/hooks.json` |
 | VSCode | `.github/copilot-instructions.md` (ajouté) | — |
 | Trae | `.trae/rules/aivectormemory.md` | — |
-| OpenCode | `AGENTS.md` (ajouté) | — |
+| OpenCode | `AGENTS.md` (ajouté) | `.opencode/plugins/*.js` |
 
 <details>
 <summary>📋 Exemple de Règles Steering (généré automatiquement)</summary>
@@ -324,6 +326,18 @@ Ou ajouter env dans la configuration MCP :
 | Web | HTTPServer natif + Vanilla JS |
 
 ## 📋 Journal des Modifications
+
+### v0.2.1
+
+- ➕ Ajouter des projets depuis le tableau de bord Web (navigateur de répertoires + saisie manuelle)
+- 🏷️ Correction de la contamination des tags entre projets (opérations limitées au projet actuel + mémoires globales)
+- 📐 Troncature par points de suspension dans la pagination des modales + largeur 80%
+- 🔌 OpenCode install génère automatiquement le plugin auto_save (événement session.idle)
+- 🔗 Claude Code / Cursor / Windsurf install génère automatiquement la configuration Hooks (sauvegarde automatique en fin de session)
+- 🎯 Améliorations UX du tableau de bord Web (retour Toast, guides d'état vide, barre d'export/import)
+- 🔧 Clic sur les cartes de statistiques (clic sur les compteurs mémoire/problèmes pour voir les détails)
+- 🏷️ Page de gestion des tags distingue les sources projet/global (marqueurs 📁/🌐)
+- 🏷️ Le nombre de tags des cartes projet inclut désormais les tags des mémoires globales
 
 ### v0.2.0
 
