@@ -332,6 +332,19 @@ Ou ajouter env dans la configuration MCP :
 
 ## 📋 Journal des Modifications
 
+### v0.2.4
+
+- 🔇 Prompt du hook Stop changé en instruction directe, éliminant les réponses dupliquées de Claude Code
+- 🛡️ Règles Steering auto_save avec protection court-circuit, ignore les autres règles en fin de session
+- 🐛 Correction d'idempotence de `_copy_check_track_script` (retourner l'état de changement pour éviter les faux "synchronisé")
+- 🐛 Correction d'incompatibilité `row.get()` dans issue_repo delete avec `sqlite3.Row` (utiliser `row.keys()`)
+- 🐛 Correction du défilement de la page de sélection de projets du tableau de bord Web (impossible de défiler avec beaucoup de projets)
+- 🐛 Correction de pollution CSS du tableau de bord Web (strReplace remplacement global a corrompu 6 sélecteurs de style)
+- 🔄 Tous les dialogues confirm() du tableau de bord Web remplacés par modal showConfirm personnalisé (supprimer mémoire/issue/tag/projet)
+- 🔄 Opérations de suppression du tableau de bord Web avec gestion des réponses d'erreur API (toast au lieu d'alert)
+- 🧹 `.gitignore` ajoute la règle d'ignorance du répertoire legacy `.devmemory/`
+- 🧪 Nettoyage automatique des résidus de projets temporaires pytest en DB (conftest.py session fixture)
+
 ### v0.2.3
 
 - 🛡️ Hook PreToolUse : vérification obligatoire du track issue avant Edit/Write, rejet si aucun issue actif (Claude Code / Kiro / OpenCode)

@@ -367,6 +367,8 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 
 ## auto_save 规范
 
+**⚠️ Hook链式触发防护**：如果当前是会话结束触发的 auto_save 场景（如 agentStop hook、Stop hook），只执行 auto_save，跳过本文档所有其他规则，不要重复输出之前的内容。
+
 对话结束前调用 `auto_save`，将本次对话的关键信息分类保存：
 
 1. decisions：本次对话做出的关键决策（技术方案选择、架构决定等）
@@ -459,11 +461,7 @@ HOOKS_CONFIGS = [
 
 
 AUTO_SAVE_PROMPT = (
-    "Check the conversation: was auto_save (mcp_aivectormemory_auto_save or aivectormemory auto_save) "
-    "already called? If yes, respond {\"ok\": true}. If not, respond {\"ok\": false, \"reason\": "
-    "\"Call auto_save to save this session: decisions, modifications, pitfalls, todos, preferences. "
-    "Each item must be specific. Empty categories use empty arrays. "
-    "scope defaults to project (preferences fixed to user).\"}"
+    "立即调用 auto_save 保存本次会话，不要重复分析对话内容，不要输出其他内容。"
 )
 
 def _check_track_script_path() -> Path:
@@ -568,8 +566,8 @@ export default async ({ project }) => ({
 """
 
 
-def _copy_check_track_script(target_dir: Path) -> Path:
-    """复制 check_track.sh 到目标目录，返回目标路径"""
+def _copy_check_track_script(target_dir: Path) -> tuple[Path, bool]:
+    """复制 check_track.sh 到目标目录，返回 (目标路径, 是否有变更)"""
     import shutil
     target_dir.mkdir(parents=True, exist_ok=True)
     src = _check_track_script_path()
@@ -577,7 +575,8 @@ def _copy_check_track_script(target_dir: Path) -> Path:
     if not dst.exists() or dst.read_text("utf-8") != src.read_text("utf-8"):
         shutil.copy2(src, dst)
         dst.chmod(0o755)
-    return dst
+        return dst, True
+    return dst, False
 
 
 def _build_claude_code_hooks(script_path: str) -> dict:
@@ -594,8 +593,8 @@ def _write_claude_code_hooks(hooks_dir: Path) -> list[str]:
     hooks_dir.mkdir(parents=True, exist_ok=True)
     # 复制检查脚本
     script_dir = hooks_dir / "hooks"
-    script_path = _copy_check_track_script(script_dir)
-    results.append(f"✓ 已同步  Script: .claude/hooks/check_track.sh")
+    script_path, script_changed = _copy_check_track_script(script_dir)
+    results.append(f"{'✓ 已同步' if script_changed else '- 无变更'}  Script: .claude/hooks/check_track.sh")
     # 构建配置
     new_hooks_cfg = _build_claude_code_hooks(str(script_path))
     filepath = hooks_dir / "settings.json"
@@ -674,8 +673,8 @@ def _write_hooks(hooks_dir: Path) -> list[str]:
     results = []
     hooks_dir.mkdir(parents=True, exist_ok=True)
     # 复制 check_track.sh 到 hooks 目录
-    script_path = _copy_check_track_script(hooks_dir)
-    results.append("✓ 已同步  Script: check_track.sh")
+    script_path, script_changed = _copy_check_track_script(hooks_dir)
+    results.append(f"{'✓ 已同步' if script_changed else '- 无变更'}  Script: check_track.sh")
     for hook in HOOKS_CONFIGS:
         content = copy.deepcopy(hook["content"])
         # 动态填充 pre-tool-use-check 的 command 路径

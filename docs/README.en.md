@@ -332,6 +332,19 @@ Or add env to MCP config:
 
 ## 📋 Changelog
 
+### v0.2.4
+
+- 🔇 Stop hook prompt changed to direct instruction, eliminating Claude Code duplicate replies
+- 🛡️ Steering rules auto_save spec adds short-circuit protection, skipping other rules on session end
+- 🐛 `_copy_check_track_script` idempotency fix (return change status to avoid false "synced" reports)
+- 🐛 issue_repo delete `row.get()` incompatibility with `sqlite3.Row` fix (use `row.keys()` check)
+- 🐛 Web dashboard project selection page scroll fix (unable to scroll with many projects)
+- 🐛 Web dashboard CSS pollution fix (strReplace global replacement corrupted 6 style selectors)
+- 🔄 Web dashboard all confirm() dialogs replaced with custom showConfirm modal (memory/issue/tag/project delete)
+- 🔄 Web dashboard delete operations add API error response handling (toast instead of alert)
+- 🧹 `.gitignore` adds `.devmemory/` legacy directory ignore rule
+- 🧪 pytest temp project DB residual auto-cleanup (conftest.py session fixture)
+
 ### v0.2.3
 
 - 🛡️ PreToolUse Hook: enforce track issue check before Edit/Write, reject if no active issues (Claude Code / Kiro / OpenCode)

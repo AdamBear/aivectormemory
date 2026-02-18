@@ -332,6 +332,19 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ## 📋 更新履歴
 
+### v0.2.4
+
+- 🔇 Stop hook プロンプトを直接指示に変更、Claude Code の重複応答を解消
+- 🛡️ Steering ルール auto_save 仕様にショートサーキット保護追加、セッション終了時に他のルールをスキップ
+- 🐛 `_copy_check_track_script` 冪等性修正（変更状態を返却し「同期済み」の誤報を回避）
+- 🐛 issue_repo delete の `row.get()` が `sqlite3.Row` と非互換の修正（`row.keys()` で判定）
+- 🐛 Web ダッシュボード プロジェクト選択ページのスクロール修正（プロジェクトが多い場合にスクロール不可）
+- 🐛 Web ダッシュボード CSS 汚染修正（strReplace グローバル置換で 6 つのスタイルセレクタが破損）
+- 🔄 Web ダッシュボードの全 confirm() ダイアログをカスタム showConfirm モーダルに置換（メモリ/イシュー/タグ/プロジェクト削除）
+- 🔄 Web ダッシュボード削除操作に API エラーレスポンス処理を追加（alert の代わりに toast）
+- 🧹 `.gitignore` に `.devmemory/` レガシーディレクトリの無視ルールを追加
+- 🧪 pytest 一時プロジェクト DB 残留の自動クリーンアップ（conftest.py セッションフィクスチャ）
+
 ### v0.2.3
 
 - 🛡️ PreToolUse Hook：Edit/Write 前に track issue を強制チェック、アクティブな問題がなければ実行拒否（Claude Code / Kiro / OpenCode 対応）

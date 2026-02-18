@@ -332,6 +332,19 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ## 📋 更新日誌
 
+### v0.2.4
+
+- 🔇 Stop hook prompt 改為直接指令，消除 Claude Code 重複回覆
+- 🛡️ Steering 規則 auto_save 規範增加短路防護，會話結束場景跳過其他規則
+- 🐛 `_copy_check_track_script` 冪等性修復（返回變更狀態避免誤報「已同步」）
+- 🐛 issue_repo delete 中 `row.get()` 對 `sqlite3.Row` 不相容修復（改用 `row.keys()` 判斷）
+- 🐛 Web 看板專案選擇頁面捲動修復（專案多時無法捲動）
+- 🐛 Web 看板 CSS 污染修復（strReplace 全域替換導致 6 處樣式異常）
+- 🔄 Web 看板所有 confirm() 彈窗替換為自訂 showConfirm 模態框（記憶/問題/標籤/專案刪除）
+- 🔄 Web 看板刪除操作增加 API 錯誤回應處理（toast 提示替代 alert）
+- 🧹 `.gitignore` 補充 `.devmemory/` 舊版殘留目錄忽略規則
+- 🧪 pytest 臨時專案資料庫殘留自動清理（conftest.py session fixture）
+
 ### v0.2.3
 
 - 🛡️ PreToolUse Hook：Edit/Write 前強制檢查 track issue，無活躍問題則拒絕執行（Claude Code / Kiro / OpenCode 三端支援）

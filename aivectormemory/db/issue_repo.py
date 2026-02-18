@@ -91,7 +91,7 @@ class IssueRepo:
                                 (issue_id, self.project_dir)).fetchone()
         if not row:
             return None
-        memory_id = row.get("memory_id", "")
+        memory_id = row["memory_id"] if "memory_id" in row.keys() else ""
         self.conn.execute("DELETE FROM issues WHERE id=?", (issue_id,))
         self.conn.commit()
         return {"issue_id": issue_id, "deleted": True, "memory_id": memory_id}
@@ -101,7 +101,7 @@ class IssueRepo:
                                 (archive_id, self.project_dir)).fetchone()
         if not row:
             return None
-        memory_id = row.get("memory_id", "")
+        memory_id = row["memory_id"] if "memory_id" in row.keys() else ""
         self.conn.execute("DELETE FROM issues_archive WHERE id=?", (archive_id,))
         self.conn.commit()
         return {"archive_id": archive_id, "deleted": True, "memory_id": memory_id}

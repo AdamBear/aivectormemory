@@ -49,9 +49,18 @@ $$('.nav-item').forEach(item => {
 function showModal(title, html, onSave) {
   $('#modal-title').textContent = title;
   $('#modal-content').innerHTML = html;
-  $('#modal-save').style.display = onSave ? 'block' : 'none';
-  $('#modal-save').onclick = onSave;
+  const saveBtn = $('#modal-save');
+  saveBtn.style.display = onSave ? 'block' : 'none';
+  saveBtn.onclick = onSave;
+  saveBtn.textContent = t('save');
+  saveBtn.className = 'btn btn--primary';
   $('#modal').classList.remove('hidden');
+}
+function showConfirm(message, onConfirm, opts = {}) {
+  showModal(t('confirm'), `<div style="padding:8px 0;white-space:pre-line">${escHtml(message)}</div>`, () => { hideModal(); onConfirm(); });
+  const saveBtn = $('#modal-save');
+  saveBtn.textContent = opts.btnText || t('confirm');
+  if (opts.danger !== false) saveBtn.className = 'btn btn--danger';
 }
 function hideModal() { $('#modal').classList.add('hidden'); }
 $$('.modal-close').forEach(b => b.addEventListener('click', hideModal));
@@ -172,12 +181,14 @@ window.editMemory = async (id) => {
   });
 };
 
-window.deleteMemory = async (id) => {
-  if (!confirm(t('confirmDelete'))) return;
-  await api(`memories/${id}`, { method: 'DELETE' });
-  toast(t('memoryDeleted'));
-  loadProjectMemories();
-  loadUserMemories();
+window.deleteMemory = (id) => {
+  showConfirm(t('confirmDelete'), async () => {
+    const res = await api(`memories/${id}`, { method: 'DELETE' });
+    if (res.error) { toast(res.error, 'error'); return; }
+    toast(t('memoryDeleted'));
+    loadProjectMemories();
+    loadUserMemories();
+  });
 };
 
 function bindSearchClear(inputId, clearId, pageKey, loadFn) {
@@ -565,19 +576,23 @@ window.editIssueAction = async (id) => {
   });
 };
 
-window.archiveIssueAction = async (id) => {
-  if (!confirm(t('confirmArchiveIssue'))) return;
-  await api(`issues/${id}?action=archive`, { method: 'DELETE' });
-  toast(t('issueArchived'));
-  loadIssues();
+window.archiveIssueAction = (id) => {
+  showConfirm(t('confirmArchiveIssue'), async () => {
+    const res = await api(`issues/${id}?action=archive`, { method: 'DELETE' });
+    if (res.error) { toast(res.error, 'error'); return; }
+    toast(t('issueArchived'));
+    loadIssues();
+  }, { btnText: t('archiveIssue'), danger: false });
 };
 
-window.deleteIssueAction = async (id, isArchived) => {
-  if (!confirm(t('confirmDeleteIssue'))) return;
-  const url = isArchived ? `issues/${id}?action=delete&archived=true` : `issues/${id}?action=delete`;
-  await api(url, { method: 'DELETE' });
-  toast(t('issueDeleted'));
-  loadIssues();
+window.deleteIssueAction = (id, isArchived) => {
+  showConfirm(t('confirmDeleteIssue'), async () => {
+    const url = isArchived ? `issues/${id}?action=delete&archived=true` : `issues/${id}?action=delete`;
+    const res = await api(url, { method: 'DELETE' });
+    if (res.error) { toast(res.error, 'error'); return; }
+    toast(t('issueDeleted'));
+    loadIssues();
+  });
 };
 
 let tagData = [], tagSelected = new Set();
@@ -661,11 +676,13 @@ function renameTagAction(oldName) {
   setTimeout(() => { const inp = $('#rename-new-name'); inp && inp.select(); }, 100);
 }
 
-async function deleteTagAction(names) {
-  if (!confirm(t('confirmDeleteTag').replace('{names}', names.join(', ')))) return;
-  await api('tags/delete', { method: 'DELETE', body: { tags: names } });
-  toast(t('tagsDeleted'));
-  loadTags();
+function deleteTagAction(names) {
+  showConfirm(t('confirmDeleteTag').replace('{names}', names.join(', ')), async () => {
+    const res = await api('tags/delete', { method: 'DELETE', body: { tags: names } });
+    if (res.error) { toast(res.error, 'error'); return; }
+    toast(t('tagsDeleted'));
+    loadTags();
+  });
 }
 
 $('#tag-select-all')?.addEventListener('change', (e) => {
@@ -811,7 +828,7 @@ function showAddProjectModal() {
   </div>`;
   showModal(t('addProjectTitle'), html, () => {
     const path = $('#add-project-path').value.trim();
-    if (!path) return alert(t('pathRequired'));
+    if (!path) return toast(t('pathRequired'), 'error');
     fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_dir: path }) })
       .then(r => r.json()).then(d => { if (d.success) { hideModal(); toast(t('addProjectSuccess'), 'success'); toast(t('addProjectInstallHint'), 'info'); loadProjects(); } });
   });
@@ -838,10 +855,11 @@ window.showAddProjectModal = showAddProjectModal;
 window.browseDirs = browseDirs;
 
 window.deleteProject = function(projectDir, name) {
-  if (!confirm(t('confirmDeleteProject').replace('{name}', name))) return;
-  fetch('/api/projects/' + encodeURIComponent(projectDir), { method: 'DELETE' })
-    .then(r => r.json())
-    .then(d => { if (d.success) loadProjects(); else alert(d.error || 'Failed'); });
+  showConfirm(t('confirmDeleteProject').replace('{name}', name), () => {
+    fetch('/api/projects/' + encodeURIComponent(projectDir), { method: 'DELETE' })
+      .then(r => r.json())
+      .then(d => { if (d.success) loadProjects(); else toast(d.error || 'Failed', 'error'); });
+  });
 };
 
 

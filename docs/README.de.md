@@ -332,6 +332,19 @@ Oder env in der MCP-Konfiguration hinzufügen:
 
 ## 📋 Änderungsprotokoll
 
+### v0.2.4
+
+- 🔇 Stop-Hook-Prompt auf direkte Anweisung geändert, Claude Code doppelte Antworten eliminiert
+- 🛡️ Steering-Regeln auto_save Spezifikation mit Kurzschluss-Schutz, überspringt andere Regeln bei Sitzungsende
+- 🐛 `_copy_check_track_script` Idempotenz-Fix (Änderungsstatus zurückgeben, falsche "synchronisiert"-Meldungen vermeiden)
+- 🐛 issue_repo delete `row.get()` Inkompatibilität mit `sqlite3.Row` behoben (Verwendung von `row.keys()`)
+- 🐛 Web-Dashboard Projektauswahl-Seite Scroll-Fix (Scrollen bei vielen Projekten nicht möglich)
+- 🐛 Web-Dashboard CSS-Verschmutzung behoben (strReplace globale Ersetzung beschädigte 6 Style-Selektoren)
+- 🔄 Web-Dashboard alle confirm()-Dialoge durch benutzerdefiniertes showConfirm-Modal ersetzt (Erinnerung/Issue/Tag/Projekt löschen)
+- 🔄 Web-Dashboard Löschoperationen mit API-Fehlerantwort-Behandlung (Toast statt Alert)
+- 🧹 `.gitignore` ergänzt `.devmemory/` Legacy-Verzeichnis Ignorierregel
+- 🧪 pytest temporäre Projekt-DB-Reste automatische Bereinigung (conftest.py Session-Fixture)
+
 ### v0.2.3
 
 - 🛡️ PreToolUse Hook: Erzwungene Track-Issue-Prüfung vor Edit/Write, Ablehnung ohne aktive Issues (Claude Code / Kiro / OpenCode)
