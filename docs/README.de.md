@@ -271,22 +271,7 @@ progress[], recent_changes[], pending[]
 <details>
 <summary>🔗 Hooks-Konfiguration Beispiel (nur Kiro, automatisch generiert)</summary>
 
-Automatisches Speichern bei Sitzungsende (`.kiro/hooks/auto-save-session.kiro.hook`):
-
-```json
-{
-  "enabled": true,
-  "name": "Sitzung automatisch speichern",
-  "version": "1",
-  "when": { "type": "agentStop" },
-  "then": {
-    "type": "askAgent",
-    "prompt": "auto_save aufrufen um Entscheidungen, Änderungen, Fehler und Aufgaben dieser Sitzung kategorisiert zu speichern"
-  }
-}
-```
-
-Entwicklungsworkflow-Prüfung (`.kiro/hooks/dev-workflow-check.kiro.hook`):
+Automatisches Speichern bei Sitzungsende entfernt. Entwicklungsworkflow-Prüfung (`.kiro/hooks/dev-workflow-check.kiro.hook`):
 
 ```json
 {
@@ -366,7 +351,6 @@ Oder env in der MCP-Konfiguration hinzufügen:
 - 🔧 `run install` MCP-Konfigurationsgenerierung behoben (sys.executable + vollständige Felder)
 - 📋 Issue-Tracking CRUD & Archivierung (Web-Dashboard Hinzufügen/Bearbeiten/Archivieren/Löschen + Erinnerungsverknüpfung)
 - 👆 Klick auf beliebige Stelle in Listenzeile öffnet Bearbeitungs-Modal (Erinnerungen/Issues/Tags)
-- 🛡️ Hook-Kettenauslöser-Schutz (agentStop + promptSubmit Kombination dupliziert keine Regelinjektion mehr)
 - 🔒 Blockierungsregeln bei Sitzungsfortsetzungen/Kontexttransfers erzwungen (erneute Bestätigung erforderlich)
 
 ### v0.2.1

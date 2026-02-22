@@ -280,22 +280,7 @@ progress[], recent_changes[], pending[]
 <details>
 <summary>🔗 Hooks 配置范例（Kiro 专属，自动生成）</summary>
 
-会话结束自动保存（`.kiro/hooks/auto-save-session.kiro.hook`）：
-
-```json
-{
-  "enabled": true,
-  "name": "会话结束自动保存",
-  "version": "1",
-  "when": { "type": "agentStop" },
-  "then": {
-    "type": "askAgent",
-    "prompt": "调用 auto_save，将本次对话的决策、修改、踩坑、待办分类保存"
-  }
-}
-```
-
-开发流程检查（`.kiro/hooks/dev-workflow-check.kiro.hook`）：
+会话结束自动保存已移除，开发流程检查（`.kiro/hooks/dev-workflow-check.kiro.hook`）：
 
 ```json
 {
@@ -341,6 +326,26 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ## 📋 更新日志
 
+### v0.2.5（未发布）
+
+- 🆕 新增 `task` 工具 — 任务管理（batch_create/update/list/delete），通过 feature_id 关联 spec 文档，支持树形子任务
+- 🆕 新增 `readme` 工具 — 从 TOOL_DEFINITIONS/pyproject.toml 自动生成 README 内容，支持多语言和差异对比
+- 🔧 `track` 工具增强：新增 delete action、9 个结构化字段（description/investigation/root_cause/solution 等）、parent_id 子问题、list 按 issue_id 查单条
+- 🔧 `track create` 自动创建 ISSUE_STEPS 关联任务（5 步排查流程），archive 时自动完成关联任务
+- 🔧 `recall` 新增 source 参数过滤（manual/auto_save）和 brief 精简模式（只返回 content+tags，节省上下文）
+- 🔧 `digest` 新增 limit/max_chars 参数防止上下文溢出，单条超 500 字自动截断
+- 🔧 `auto_save` 新增 digest 阈值检测，碎片超 20 条自动创建系统任务并返回 digest_hint
+- 🔧 `auto_save` 写入记忆标记 source="auto_save"，区分手动记忆和自动保存
+- 📊 DB Schema v4→v6：issues/issues_archive 新增 9 个结构化字段 + tasks 表 + memories.source 字段 + tasks 树形结构
+- 🛡️ Server 主循环增加全局异常捕获，单条消息错误不再导致 server 退出
+- 🛡️ Protocol 层增加空行跳过和 JSON 解析异常容错
+- 🕐 时间戳从 UTC 改为本地时区（memory_repo/issue_repo/state_repo/server）
+- 📊 Web 看板新增任务管理 CRUD API（GET/POST/PUT/DELETE /api/tasks）
+- 📊 Web 看板记忆列表新增 source 过滤和 exclude_tags 排除过滤
+- 📊 Web 看板前端大幅增强（+258 行 JS、+376 行 i18n、+66 行 CSS）
+- 📝 Steering 模板新增 Spec 流程与任务管理章节、context transfer 续接规则
+- 📝 各 IDE hooks 生成逻辑同步更新
+
 ### v0.2.4
 
 - 🔇 Stop hook prompt 改为直接指令，消除 Claude Code 重复回复
@@ -375,7 +380,6 @@ export HF_ENDPOINT=https://hf-mirror.com
 - 🔧 `run install` MCP 配置生成修复（sys.executable + 完整字段）
 - 📋 问题跟踪增删改归档（Web 看板添加/编辑/归档/删除 + 记忆关联）
 - 👆 全部列表页点击行任意位置弹出编辑弹窗（记忆/问题/标签）
-- 🛡️ Hook 链式触发防护（agentStop + promptSubmit 组合不再重复注入规则）
 - 🔒 会话延续/上下文转移时阻塞规则强制生效（跨会话必须重新确认）
 
 ### v0.2.1

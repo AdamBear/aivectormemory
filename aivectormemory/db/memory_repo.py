@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from aivectormemory.config import USER_SCOPE_DIR
 
 
@@ -11,10 +11,11 @@ class MemoryRepo:
         self.project_dir = project_dir
 
     def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now().astimezone().isoformat()
 
     def insert(self, content: str, tags: list[str], scope: str, session_id: int,
-               embedding: list[float], dedup_threshold: float = 0.95) -> dict:
+               embedding: list[float], dedup_threshold: float = 0.95,
+               source: str = "manual") -> dict:
         pdir = USER_SCOPE_DIR if scope == "user" else self.project_dir
         dup = self.find_duplicate(embedding, dedup_threshold, pdir)
         if dup:
@@ -23,8 +24,8 @@ class MemoryRepo:
         now = self._now()
         mid = uuid.uuid4().hex[:12]
         self.conn.execute(
-            "INSERT INTO memories (id, content, tags, scope, project_dir, session_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-            (mid, content, json.dumps(tags, ensure_ascii=False), scope, pdir, session_id, now, now)
+            "INSERT INTO memories (id, content, tags, scope, source, project_dir, session_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (mid, content, json.dumps(tags, ensure_ascii=False), scope, source, pdir, session_id, now, now)
         )
         self.conn.execute(
             "INSERT INTO vec_memories (id, embedding) VALUES (?, ?)",
@@ -62,7 +63,8 @@ class MemoryRepo:
         return None
 
     def search_by_vector(self, embedding: list[float], top_k: int = 5,
-                         scope: str = "all", project_dir: str = "") -> list[dict]:
+                         scope: str = "all", project_dir: str = "",
+                         source: str | None = None) -> list[dict]:
         k = top_k * 3
         rows = self.conn.execute(
             "SELECT id, distance FROM vec_memories WHERE embedding MATCH ? AND k = ?",
@@ -77,6 +79,8 @@ class MemoryRepo:
                 continue
             if scope == "user" and mem["project_dir"] != USER_SCOPE_DIR:
                 continue
+            if source and mem.get("source", "manual") != source:
+                continue
             d = dict(mem)
             d["distance"] = r["distance"]
             results.append(d)
@@ -86,9 +90,10 @@ class MemoryRepo:
 
     def search_by_vector_with_tags(self, embedding: list[float], tags: list[str],
                                     top_k: int = 5, scope: str = "all",
-                                    project_dir: str = "") -> list[dict]:
+                                    project_dir: str = "",
+                                    source: str | None = None) -> list[dict]:
         import numpy as np
-        candidates = self.list_by_tags(tags, scope=scope, project_dir=project_dir, limit=1000)
+        candidates = self.list_by_tags(tags, scope=scope, project_dir=project_dir, limit=1000, source=source)
         if not candidates:
             return []
         query_vec = np.array(embedding, dtype=np.float32)
@@ -140,8 +145,14 @@ class MemoryRepo:
         if project_dir is not None:
             return self.conn.execute("SELECT COUNT(*) FROM memories WHERE project_dir=?", (project_dir,)).fetchone()[0]
         return self.conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+    def count_by_source(self, source: str) -> int:
+        row = self.conn.execute(
+            "SELECT COUNT(*) as cnt FROM memories WHERE project_dir=? AND source=?",
+            (self.project_dir, source)
+        ).fetchone()
+        return row["cnt"] if row else 0
     def list_by_tags(self, tags: list[str], scope: str = "all", project_dir: str = "",
-                     limit: int = 100) -> list[dict]:
+                     limit: int = 100, source: str | None = None) -> list[dict]:
         sql, params = "SELECT * FROM memories WHERE 1=1", []
         if scope == "project":
             sql += " AND project_dir=?"
@@ -149,6 +160,9 @@ class MemoryRepo:
         elif scope == "user":
             sql += f" AND project_dir=?"
             params.append(USER_SCOPE_DIR)
+        if source:
+            sql += " AND source=?"
+            params.append(source)
         for tag in tags:
             sql += " AND tags LIKE ?"
             params.append(f'%"{tag}"%')

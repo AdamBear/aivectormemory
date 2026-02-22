@@ -271,22 +271,7 @@ progress[], recent_changes[], pending[]
 <details>
 <summary>🔗 フック設定例（Kiro専用、自動生成）</summary>
 
-セッション終了時の自動保存（`.kiro/hooks/auto-save-session.kiro.hook`）：
-
-```json
-{
-  "enabled": true,
-  "name": "セッション自動保存",
-  "version": "1",
-  "when": { "type": "agentStop" },
-  "then": {
-    "type": "askAgent",
-    "prompt": "auto_saveを呼び出して、このセッションの決定、変更、つまずき、TODOを分類して保存"
-  }
-}
-```
-
-開発ワークフローチェック（`.kiro/hooks/dev-workflow-check.kiro.hook`）：
+セッション終了時の自動保存は削除済み、開発ワークフローチェック（`.kiro/hooks/dev-workflow-check.kiro.hook`）：
 
 ```json
 {
@@ -366,7 +351,6 @@ export HF_ENDPOINT=https://hf-mirror.com
 - 🔧 `run install` MCP 設定生成の修正（sys.executable + 完全なフィールド）
 - 📋 問題追跡の CRUD とアーカイブ（Web ダッシュボード 追加/編集/アーカイブ/削除 + 記憶関連付け）
 - 👆 リスト行の任意の場所をクリックで編集モーダルを表示（記憶/問題/タグ）
-- 🛡️ Hook チェーントリガー防護（agentStop + promptSubmit の組み合わせでルールの重複注入を防止）
 - 🔒 セッション継続/コンテキスト転送時にブロッキングルールを強制適用（再確認が必要）
 
 ### v0.2.1

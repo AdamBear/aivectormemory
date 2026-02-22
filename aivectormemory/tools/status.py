@@ -8,6 +8,8 @@ def handle_status(args, *, cm, **_):
     state_update = args.get("state")
 
     if state_update:
+        if isinstance(state_update, str):
+            state_update = json.loads(state_update)
         result = repo.upsert(**state_update)
         return json.dumps(success_response(state=result, action="updated"))
     else:

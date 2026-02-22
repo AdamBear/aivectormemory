@@ -4,6 +4,7 @@ from aivectormemory.config import USER_SCOPE_DIR
 from aivectormemory.db.memory_repo import MemoryRepo
 from aivectormemory.db.state_repo import StateRepo
 from aivectormemory.db.issue_repo import IssueRepo
+from aivectormemory.db.task_repo import TaskRepo
 
 
 def _resolve_project(cm, params):
@@ -23,6 +24,7 @@ def handle_api_request(handler, cm):
             "/api/memories": lambda: get_memories(cm, params, pdir),
             "/api/status": lambda: get_status(cm, pdir),
             "/api/issues": lambda: get_issues(cm, params, pdir),
+            "/api/tasks": lambda: get_tasks(cm, params, pdir),
             "/api/stats": lambda: get_stats(cm, pdir),
             "/api/tags": lambda: get_tags(cm, params, pdir),
             "/api/projects": lambda: get_projects(cm),
@@ -34,6 +36,7 @@ def handle_api_request(handler, cm):
             "/api/search": lambda: search_memories(handler, cm, pdir),
             "/api/projects": lambda: add_project(handler, cm),
             "/api/issues": lambda: post_issue(handler, cm, pdir),
+            "/api/tasks": lambda: post_tasks(handler, cm, pdir),
         },
         "PUT": {
             "/api/status": lambda: put_status(handler, cm, pdir),
@@ -68,6 +71,16 @@ def handle_api_request(handler, cm):
             return _json_response(handler, put_issue(handler, cm, iid, pdir))
         elif method == "DELETE":
             return _json_response(handler, delete_issue(handler, cm, iid, pdir, params))
+
+    if path.startswith("/api/tasks/") and len(path.split("/")) == 4:
+        tid = int(path.split("/")[3])
+        if method == "PUT":
+            return _json_response(handler, put_task(handler, cm, tid, pdir))
+        elif method == "DELETE":
+            return _json_response(handler, delete_task(cm, tid, pdir))
+
+    if path == "/api/tasks" and method == "DELETE":
+        return _json_response(handler, delete_tasks_by_feature(handler, cm, pdir, params))
 
     route_fn = routes.get(method, {}).get(path)
     if route_fn:
@@ -104,6 +117,8 @@ def get_memories(cm, params, pdir):
     scope = params.get("scope", ["all"])[0]
     query = params.get("query", [None])[0]
     tag = params.get("tag", [None])[0]
+    source = params.get("source", [None])[0]
+    exclude_tags = params.get("exclude_tags", [None])[0]
     limit = int(params.get("limit", [100])[0])
     offset = int(params.get("offset", [0])[0])
 
@@ -112,11 +127,27 @@ def get_memories(cm, params, pdir):
 
     if tag:
         tag_filter_dir = filter_dir if filter_dir is not None else USER_SCOPE_DIR
-        all_rows = repo.list_by_tags([tag], scope=scope, project_dir=tag_filter_dir, limit=9999)
+        all_rows = repo.list_by_tags([tag], scope=scope, project_dir=tag_filter_dir, limit=9999, source=source)
+        if query:
+            q = query.lower()
+            all_rows = [r for r in all_rows if q in r.get("content", "").lower()]
+        total = len(all_rows)
+        results = all_rows[offset:offset + limit]
+    elif exclude_tags:
+        ex_set = set(exclude_tags.split(","))
+        all_rows = repo.get_all(limit=9999, offset=0, project_dir=filter_dir)
+        all_rows = [r for r in all_rows if not ex_set.intersection(json.loads(r["tags"]) if isinstance(r["tags"], str) else (r["tags"] or []))]
+        if source:
+            all_rows = [r for r in all_rows if r.get("source", "manual") == source]
+        if query:
+            q = query.lower()
+            all_rows = [r for r in all_rows if q in r.get("content", "").lower()]
         total = len(all_rows)
         results = all_rows[offset:offset + limit]
     else:
         rows = repo.get_all(limit=limit, offset=offset, project_dir=filter_dir)
+        if source:
+            rows = [r for r in rows if r.get("source", "manual") == source]
         total = repo.count(project_dir=filter_dir)
         results = [r for r in rows if not query or query.lower() in r.get("content", "").lower()] if query else rows
 
@@ -196,7 +227,9 @@ def put_issue(handler, cm, iid, pdir):
     old = repo.get_by_id(iid)
     if not old:
         return {"error": "not found"}
-    fields = {k: body[k] for k in ("title", "status", "content") if k in body}
+    fields = {k: body[k] for k in ("title", "status", "content",
+              "description", "investigation", "root_cause", "solution",
+              "files_changed", "test_result", "notes", "feature_id") if k in body}
     result = repo.update(iid, **fields)
     if not result:
         return {"error": "not found"}
@@ -225,7 +258,8 @@ def post_issue(handler, cm, pdir):
     d = body.get("date", date.today().isoformat())
 
     repo = IssueRepo(cm.conn, pdir)
-    result = repo.create(d, title, content)
+    parent_id = body.get("parent_id", 0)
+    result = repo.create(d, title, content, parent_id=parent_id)
     if result.get("deduplicated"):
         return result
 
@@ -265,6 +299,37 @@ def delete_issue(handler, cm, iid, pdir, params):
     if memory_id:
         mem_repo.delete(memory_id)
     return result
+
+
+def get_tasks(cm, params, pdir):
+    repo = TaskRepo(cm.conn, pdir)
+    feature_id = params.get("feature_id", [None])[0]
+    status = params.get("status", [None])[0]
+    tasks = repo.list_by_feature(feature_id=feature_id, status=status)
+    return {"tasks": tasks}
+
+
+def post_tasks(handler, cm, pdir):
+    body = _read_body(handler)
+    repo = TaskRepo(cm.conn, pdir)
+    feature_id = body.get("feature_id", "").strip()
+    if not feature_id:
+        return {"error": "feature_id is required"}
+    tasks = body.get("tasks", [])
+    if not tasks:
+        return {"error": "tasks array is required"}
+    result = repo.batch_create(feature_id, tasks, task_type=body.get("task_type", "manual"))
+    return result
+
+
+def put_task(handler, cm, tid, pdir):
+    body = _read_body(handler)
+    repo = TaskRepo(cm.conn, pdir)
+    fields = {k: body[k] for k in ("status", "title") if k in body}
+    result = repo.update(tid, **fields)
+    if not result:
+        return {"error": "not found"}
+    return {"task": result}
 
 
 def _merged_tag_counts(repo, pdir):
@@ -449,7 +514,7 @@ def add_project(handler, cm):
         return {"error": "project_dir is required"}
     project_dir = project_dir.replace("\\", "/")
     conn = cm.conn
-    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+    now = __import__("datetime").datetime.now().astimezone().isoformat()
     conn.execute(
         "INSERT OR IGNORE INTO session_state (project_dir, is_blocked, block_reason, next_step, current_task, progress, recent_changes, pending, updated_at) VALUES (?,0,'','','','[]','[]','[]',?)",
         (project_dir, now)
@@ -571,3 +636,18 @@ def search_memories(handler, cm, pdir):
     for r in results:
         r["similarity"] = round(1 - (r.get("distance", 0) ** 2) / 2, 4)
     return {"results": results, "count": len(results), "query": query}
+
+
+def delete_task(cm, tid, pdir):
+    repo = TaskRepo(cm.conn, pdir)
+    result = repo.delete(tid)
+    return result if result else {"error": "not found"}
+
+
+def delete_tasks_by_feature(handler, cm, pdir, params):
+    feature_id = params.get("feature_id", [None])[0]
+    if not feature_id:
+        return {"error": "feature_id is required"}
+    repo = TaskRepo(cm.conn, pdir)
+    count = repo.delete_by_feature(feature_id)
+    return {"deleted": count, "feature_id": feature_id}

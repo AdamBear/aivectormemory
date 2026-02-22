@@ -13,7 +13,7 @@ const api = (path, opts = {}) => {
   }).then(r => r.json());
 };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 const state = { projectPage: 1, userPage: 1 };
 
 const i18n = { get status() { return t('status') || {}; } };
@@ -66,12 +66,43 @@ function hideModal() { $('#modal').classList.add('hidden'); }
 $$('.modal-close').forEach(b => b.addEventListener('click', hideModal));
 $('.modal-overlay').addEventListener('click', hideModal);
 
+function renderFilesChanged(json) {
+  try {
+    const files = typeof json === 'string' ? JSON.parse(json) : json;
+    if (!Array.isArray(files) || !files.length) return '';
+    return `<ul class="issue-files-list">${files.map(f =>
+      `<li class="issue-file-item"><code>${escHtml(f.path || f)}</code><span class="badge badge--${f.done ? 'success' : 'warning'} badge--xs">${f.done ? t('fileDone') : t('fileNotDone')}</span></li>`
+    ).join('')}</ul>`;
+  } catch { return `<pre>${escHtml(json)}</pre>`; }
+}
+
+function renderStructuredFields(i) {
+  const fields = [
+    ['issueDescription', i.description],
+    ['issueInvestigation', i.investigation],
+    ['issueRootCause', i.root_cause],
+    ['issueSolution', i.solution],
+    ['issueTestResult', i.test_result],
+    ['issueNotes', i.notes],
+  ];
+  const hasFields = fields.some(([, v]) => v) || (i.files_changed && i.files_changed !== '[]');
+  if (!hasFields) return '';
+  return `<div class="issue-structured">
+    ${fields.map(([key, val]) => val ? `<div class="issue-field"><span class="issue-field__label">${t(key)}</span><div class="issue-field__value">${escHtml(val)}</div></div>` : '').join('')}
+    ${i.files_changed && i.files_changed !== '[]' ? `<div class="issue-field"><span class="issue-field__label">${t('issueFilesChanged')}</span><div class="issue-field__value">${renderFilesChanged(i.files_changed)}</div></div>` : ''}
+    ${i.feature_id ? `<div class="issue-field"><span class="issue-field__label">${t('issueFeatureId')}</span><div class="issue-field__value"><code>${escHtml(i.feature_id)}</code></div></div>` : ''}
+  </div>`;
+}
+
 function renderIssueCard(i) {
   const badgeMap = { pending: 'warning', in_progress: 'info', completed: 'success' };
   const isArchived = !!i.archived_at;
   const badge = isArchived ? 'muted' : (badgeMap[i.status] || 'muted');
   const label = i18n.status[isArchived ? 'archived' : i.status] || i.status;
   const meta = isArchived ? `${i.date} · ${t('archivedAt')} ${i.archived_at}` : `${i.date} · ${t('createdAt')} ${i.created_at}`;
+  const parentTag = i.parent_id > 0 ? `<span class="issue-parent-tag">${t('relatedTo')} #${i.parent_id}</span>` : '';
+  const structured = renderStructuredFields(i);
+  const hasExpandable = i.content || structured;
   const actions = isArchived
     ? `<div class="issue-card__actions">
         <button class="btn btn--ghost-danger btn--sm" onclick="event.stopPropagation();deleteIssueAction(${i.id}, true)">${t('delete')}</button>
@@ -84,33 +115,42 @@ function renderIssueCard(i) {
   return `
   <div class="issue-card" style="cursor:pointer" onclick="${isArchived ? `this.classList.toggle('expanded')` : `if(!event.target.closest('.issue-card__actions')){editIssueAction(${i.id})}else{this.classList.toggle('expanded')}`}">
     <div class="issue-card__header">
-      <div class="issue-card__title"><span class="issue-card__number">#${i.issue_number}</span>${escHtml(i.title)}</div>
+      <div class="issue-card__title"><span class="issue-card__number">#${i.issue_number}</span>${escHtml(i.title)}${parentTag}</div>
       <div style="display:flex;align-items:center;gap:8px">
         <span class="badge badge--${badge}">${escHtml(label)}</span>
         ${actions}
       </div>
     </div>
     ${i.content ? `<div class="issue-card__content">${escHtml(i.content)}</div>` : ''}
+    ${structured}
     <div class="issue-card__meta">${meta}</div>
-    ${i.content ? `<div class="issue-card__expand">${t('clickExpand')}</div>` : ''}
+    ${hasExpandable ? `<div class="issue-card__expand">${t('clickExpand')}</div>` : ''}
   </div>`;
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function renderMemoryCard(m) {
   const tags = parseTags(m.tags);
   return `<div class="memory-card" style="cursor:pointer" onclick="if(!event.target.closest('.memory-card__actions')){editMemory('${m.id}')}">
     <div class="memory-card__header">
-      <div class="memory-card__id">${m.id}</div>
+      <div class="memory-card__header-left">
+        <div class="memory-card__id">${m.id}</div>
+        <div class="memory-card__tags">${tags.map(tg => `<span class="tag">${escHtml(TAG_I18N[tg] ? t(TAG_I18N[tg]) : tg)}</span>`).join('')}</div>
+        <div class="memory-card__time">${formatTime(m.created_at)}</div>
+      </div>
       <div class="memory-card__actions">
         <button class="btn btn--ghost btn--sm" onclick="event.stopPropagation();editMemory('${m.id}')">${t('edit')}</button>
         <button class="btn btn--ghost-danger btn--sm" onclick="event.stopPropagation();deleteMemory('${m.id}')">${t('delete')}</button>
       </div>
     </div>
     <div class="memory-card__content">${escHtml(m.content)}</div>
-    <div class="memory-card__footer">
-      <div class="memory-card__tags">${tags.map(tg => `<span class="tag">${escHtml(tg)}</span>`).join('')}</div>
-      <div class="memory-card__time">${m.created_at || ''}</div>
-    </div>
   </div>`;
 }
 
@@ -142,7 +182,8 @@ async function loadMemoriesByScope(scope, listId, pagerId, searchId, countId, pa
   const query = $(searchId).value;
   const page = state[pageKey];
   const offset = (page - 1) * PAGE_SIZE;
-  const params = `memories?scope=${scope}&limit=${PAGE_SIZE}&offset=${offset}` + (query ? `&query=${encodeURIComponent(query)}` : '');
+  let params = `memories?scope=${scope}&limit=${PAGE_SIZE}&offset=${offset}`;
+  if (query) params += `&query=${encodeURIComponent(query)}`;
   const data = await api(params);
   const memories = data.memories || [];
   const total = data.total || memories.length;
@@ -161,6 +202,8 @@ function loadProjectMemories() {
 function loadUserMemories() {
   loadMemoriesByScope('user', '#user-memory-list', '#user-pager', '#user-search', '#user-count', 'userPage');
 }
+
+const TAG_I18N = { decision: 'catDecision', modification: 'catModification', pitfall: 'catPitfall', todo: 'catTodo', preference: 'catPreference' };
 
 window.editMemory = async (id) => {
   const m = await api(`memories/${id}`);
@@ -547,6 +590,21 @@ window.editIssueAction = async (id) => {
   all.push(...(data3.issues || []));
   const issue = all.find(i => i.id === id);
   if (!issue) return;
+  const extraFields = [
+    ['issueDescription', 'edit-issue-description', issue.description, 80],
+    ['issueInvestigation', 'edit-issue-investigation', issue.investigation, 80],
+    ['issueRootCause', 'edit-issue-rootcause', issue.root_cause, 60],
+    ['issueSolution', 'edit-issue-solution', issue.solution, 60],
+    ['issueFilesChanged', 'edit-issue-files', issue.files_changed && issue.files_changed !== '[]' ? issue.files_changed : '', 60],
+    ['issueTestResult', 'edit-issue-testresult', issue.test_result, 60],
+    ['issueNotes', 'edit-issue-notes', issue.notes, 60],
+    ['issueFeatureId', 'edit-issue-featureid', issue.feature_id, 0],
+  ];
+  const hasExtra = extraFields.some(([,, v]) => v);
+  const extraHtml = extraFields.map(([key, id, val, h]) =>
+    h ? `<div class="form-field"><label class="form-label">${t(key)}</label><textarea class="form-textarea" id="${id}" style="min-height:${h}px">${escHtml(val || (key === 'issueFilesChanged' ? '[]' : ''))}</textarea></div>`
+      : `<div class="form-field"><label class="form-label">${t(key)}</label><input class="form-input" id="${id}" value="${escHtml(val || '')}"></div>`
+  ).join('');
   showModal(t('editIssue'), `
     <div class="form-field"><label class="form-label">${t('issueTitle')}</label>
       <input class="form-input" id="edit-issue-title" value="${escHtml(issue.title)}"></div>
@@ -558,6 +616,10 @@ window.editIssueAction = async (id) => {
       </select></div>
     <div class="form-field"><label class="form-label">${t('issueContent')}</label>
       <textarea class="form-textarea" id="edit-issue-content" style="min-height:120px">${escHtml(issue.content || '')}</textarea></div>
+    <details class="issue-extra-fields" ${hasExtra ? 'open' : ''}>
+      <summary class="issue-extra-toggle">${t('moreFields') || '更多字段'}</summary>
+      ${extraHtml}
+    </details>
     <div class="form-field"><label class="form-label">${t('issueTags')}</label>
       <input class="form-input" id="edit-issue-tags" value=""></div>
   `, async () => {
@@ -567,6 +629,14 @@ window.editIssueAction = async (id) => {
       title,
       status: $('#edit-issue-status').value,
       content: $('#edit-issue-content').value,
+      description: $('#edit-issue-description').value,
+      investigation: $('#edit-issue-investigation').value,
+      root_cause: $('#edit-issue-rootcause').value,
+      solution: $('#edit-issue-solution').value,
+      files_changed: $('#edit-issue-files').value,
+      test_result: $('#edit-issue-testresult').value,
+      notes: $('#edit-issue-notes').value,
+      feature_id: $('#edit-issue-featureid').value,
       tags: $('#edit-issue-tags').value.split(',').map(s => s.trim()).filter(Boolean),
     };
     await api(`issues/${id}`, { method: 'PUT', body });
@@ -596,6 +666,175 @@ window.deleteIssueAction = (id, isArchived) => {
 };
 
 let tagData = [], tagSelected = new Set();
+
+const TASK_STATUS_CLASSES = { pending: 'status--pending', in_progress: 'status--progress', completed: 'status--done', skipped: 'status--skipped' };
+
+window._expandedNodes = new Set();
+
+function formatFeatureId(fid) {
+  if (fid.startsWith('_sys/digest')) return t('sysDigest');
+  if (fid.startsWith('issue/')) return t('issuePrefix') + fid.split('/')[1];
+  return fid;
+}
+
+window.toggleNodeCollapse = (nodeId) => {
+  window._expandedNodes.has(nodeId) ? window._expandedNodes.delete(nodeId) : window._expandedNodes.add(nodeId);
+  loadTasks();
+};
+
+function renderTaskCard(t_item) {
+  const cls = TASK_STATUS_CLASSES[t_item.status] || '';
+  const kids = t_item.children || [];
+  const editBtn = `<span class="task-action-btn" onclick="event.stopPropagation();editTaskAction(${t_item.id},'${escHtml(t_item.title).replace(/'/g,'\\&#39;')}')" title="${t('editTask')}">✎</span>`;
+  const delBtn = `<span class="task-action-btn task-action-btn--danger" onclick="event.stopPropagation();deleteTaskAction(${t_item.id})" title="${t('deleteTask')}">✕</span>`;
+  if (kids.length) {
+    const done = kids.filter(c => c.status === 'completed').length;
+    const collapsed = !window._expandedNodes?.has(t_item.id) ? ' collapsed' : '';
+    return `<div class="task-node" data-id="${t_item.id}">
+      <div class="task-node-header${collapsed}" onclick="toggleNodeCollapse(${t_item.id})">
+        <span class="task-node-toggle">▼</span>
+        <span class="task-title">${escHtml(t_item.title)}</span>
+        <span class="task-node-progress">${done}/${kids.length}</span>
+        <span class="task-status-badge task-status--${t_item.status}">${t('status.' + t_item.status)}</span>
+        <span class="task-actions-group">
+          <span class="task-action-btn" onclick="event.stopPropagation();addTaskToFeature('${escHtml(t_item.feature_id).replace(/'/g,'\\&#39;')}',${t_item.id})" title="${t('addTask')}">＋</span>
+          ${editBtn}${delBtn}
+        </span>
+      </div>
+      <div class="task-children${collapsed ? ' hidden' : ''}">${kids.map(c => {
+        const cEditBtn = `<span class="task-action-btn" onclick="event.stopPropagation();editTaskAction(${c.id},'${escHtml(c.title).replace(/'/g,'\\&#39;')}')" title="${t('editTask')}">✎</span>`;
+        const cDelBtn = `<span class="task-action-btn task-action-btn--danger" onclick="event.stopPropagation();deleteTaskAction(${c.id})" title="${t('deleteTask')}">✕</span>`;
+        return `<div class="task-item ${TASK_STATUS_CLASSES[c.status] || ''}" data-id="${c.id}">
+          <span class="task-checkbox" onclick="toggleTaskStatus(${c.id}, '${c.status}')">${c.status === 'completed' ? '☑' : c.status === 'skipped' ? '☒' : '☐'}</span>
+          <span class="task-title ${c.status === 'completed' || c.status === 'skipped' ? 'task-done' : ''}">${escHtml(c.title)}</span>
+          <span class="task-status-badge task-status--${c.status}">${t('status.' + c.status)}</span>
+          <span class="task-actions-group">${cEditBtn}${cDelBtn}</span>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  }
+  return `<div class="task-item ${cls}" data-id="${t_item.id}">
+    <span class="task-checkbox" onclick="toggleTaskStatus(${t_item.id}, '${t_item.status}')">${t_item.status === 'completed' ? '☑' : t_item.status === 'skipped' ? '☒' : '☐'}</span>
+    <span class="task-title ${t_item.status === 'completed' || t_item.status === 'skipped' ? 'task-done' : ''}">${escHtml(t_item.title)}</span>
+    <span class="task-status-badge task-status--${t_item.status}">${t('status.' + t_item.status)}</span>
+    <span class="task-actions-group">${editBtn}${delBtn}</span>
+  </div>`;
+}
+
+async function loadTasks() {
+  const featureId = $('#task-feature-filter').value;
+  const status = $('#task-status-filter').value;
+  let url = 'tasks?';
+  if (featureId) url += `feature_id=${encodeURIComponent(featureId)}&`;
+  if (status) url += `status=${status}`;
+  const data = await api(url);
+  const tasks = data.tasks || [];
+
+  const features = [...new Set(tasks.map(t_item => t_item.feature_id))];
+  const filterEl = $('#task-feature-filter');
+  const curVal = filterEl.value;
+  filterEl.innerHTML = `<option value="" data-i18n="allFeatures">${t('allFeatures')}</option>` +
+    features.map(f => `<option value="${escHtml(f)}"${f === curVal ? ' selected' : ''}>${escHtml(f)}</option>`).join('');
+
+  if (!tasks.length) {
+    $('#task-list').innerHTML = `<div class="empty-state">${t('noTasks')}</div>`;
+    return;
+  }
+
+  const grouped = {};
+  tasks.forEach(t_item => {
+    (grouped[t_item.feature_id] = grouped[t_item.feature_id] || []).push(t_item);
+  });
+
+  let html = '';
+  for (const [fid, items] of Object.entries(grouped)) {
+    let total = 0, done = 0;
+    items.forEach(i => {
+      const kids = i.children || [];
+      if (kids.length) { total += kids.length; done += kids.filter(c => c.status === 'completed').length; }
+      else { total++; if (i.status === 'completed') done++; }
+    });
+    const addBtn = `<span class="task-action-btn" onclick="addTaskToFeature('${escHtml(fid).replace(/'/g,'\\&#39;')}')" title="${t('addTask')}">＋</span>`;
+    const delGrpBtn = `<span class="task-action-btn task-action-btn--danger" onclick="deleteFeatureGroupAction('${escHtml(fid).replace(/'/g,'\\&#39;')}')" title="${t('deleteFeatureGroup')}">✕</span>`;
+    html += `<div class="task-group">
+      <div class="task-group-header">
+        <span class="task-group-title">${escHtml(formatFeatureId(fid))}</span>
+        <span class="task-group-header-right">
+          <span class="task-group-progress">${done}/${total}</span>
+          <span class="task-actions-group">${addBtn}${delGrpBtn}</span>
+        </span>
+      </div>
+      <div class="task-group-items">${items.map(renderTaskCard).join('')}</div>
+    </div>`;
+  }
+  $('#task-list').innerHTML = html;
+}
+
+window.toggleTaskStatus = async (id, current) => {
+  const next = current === 'completed' ? 'pending' : 'completed';
+  await api(`tasks/${id}`, { method: 'PUT', body: { status: next } });
+  loadTasks();
+};
+
+window.addFeatureGroup = () => {
+  const html = `<div class="form-field"><label class="form-label">${t('featureGroupName')}</label><input class="form-input" id="modal-fg-name"></div>
+    <div class="form-field"><label class="form-label">${t('taskTitle')}</label><input class="form-input" id="modal-fg-task"></div>`;
+  showModal(t('addFeatureGroup'), html, async () => {
+    const name = $('#modal-fg-name').value.trim();
+    const task = $('#modal-fg-task').value.trim();
+    if (!name) return;
+    const tasks = task ? [{ title: task }] : [];
+    await api('tasks', { method: 'POST', body: { feature_id: name, tasks } });
+    hideModal();
+    toast(t('featureGroupCreated'));
+    loadTasks();
+  });
+};
+
+window.addTaskToFeature = (featureId, parentId = 0) => {
+  const html = `<div class="form-field"><label class="form-label">${t('taskTitle')}</label><input class="form-input" id="modal-task-title"></div>`;
+  showModal(t('addTask'), html, async () => {
+    const title = $('#modal-task-title').value.trim();
+    if (!title) return;
+    const tasks = parentId ? [{ title, parent_id: parentId }] : [{ title }];
+    await api('tasks', { method: 'POST', body: { feature_id: featureId, tasks } });
+    hideModal();
+    toast(t('taskCreated'));
+    loadTasks();
+  });
+};
+
+window.editTaskAction = (id, currentTitle) => {
+  const decoded = new DOMParser().parseFromString(currentTitle, 'text/html').body.textContent;
+  const html = `<div class="form-field"><label class="form-label">${t('taskTitle')}</label><input class="form-input" id="modal-edit-title" value="${escHtml(decoded)}"></div>`;
+  showModal(t('editTask'), html, async () => {
+    const title = $('#modal-edit-title').value.trim();
+    if (!title) return;
+    await api(`tasks/${id}`, { method: 'PUT', body: { title } });
+    hideModal();
+    toast(t('taskUpdated'));
+    loadTasks();
+  });
+};
+
+window.deleteTaskAction = (id) => {
+  showConfirm(t('confirmDeleteTask'), async () => {
+    await api(`tasks/${id}`, { method: 'DELETE' });
+    toast(t('taskDeleted'));
+    loadTasks();
+  });
+};
+
+window.deleteFeatureGroupAction = (featureId) => {
+  showConfirm(t('confirmDeleteFeatureGroup'), async () => {
+    await api(`tasks?feature_id=${encodeURIComponent(featureId)}`, { method: 'DELETE' });
+    toast(t('featureGroupDeleted'));
+    loadTasks();
+  });
+};
+
+$('#task-feature-filter')?.addEventListener('change', loadTasks);
+$('#task-status-filter')?.addEventListener('change', loadTasks);
 
 async function loadTags() {
   const query = $('#tag-search')?.value || '';
@@ -741,6 +980,7 @@ function loadTab(tab) {
     status: loadStatus,
     issues: loadIssues,
     tags: loadTags,
+    tasks: loadTasks,
   })[tab]?.();
 }
 

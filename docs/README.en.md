@@ -271,22 +271,7 @@ progress[], recent_changes[], pending[]
 <details>
 <summary>🔗 Hooks Config Example (Kiro only, auto-generated)</summary>
 
-Auto-save on session end (`.kiro/hooks/auto-save-session.kiro.hook`):
-
-```json
-{
-  "enabled": true,
-  "name": "Auto-save Session",
-  "version": "1",
-  "when": { "type": "agentStop" },
-  "then": {
-    "type": "askAgent",
-    "prompt": "Call auto_save to categorize and save decisions, modifications, pitfalls, and todos from this session"
-  }
-}
-```
-
-Dev workflow check (`.kiro/hooks/dev-workflow-check.kiro.hook`):
+Auto-save on session end removed. Dev workflow check (`.kiro/hooks/dev-workflow-check.kiro.hook`):
 
 ```json
 {
@@ -366,7 +351,6 @@ Or add env to MCP config:
 - 🔧 `run install` MCP config generation fix (sys.executable + complete fields)
 - 📋 Issue tracking CRUD & archive (Web dashboard add/edit/archive/delete + memory association)
 - 👆 Click anywhere on list row to open edit modal (memories/issues/tags)
-- 🛡️ Hook chain-trigger protection (agentStop + promptSubmit combo no longer duplicates rule injection)
 - 🔒 Blocking rules enforced across session continuations/context transfers (re-confirmation required)
 
 ### v0.2.1

@@ -271,22 +271,7 @@ progress[], recent_changes[], pending[]
 <details>
 <summary>🔗 Exemple de Configuration Hooks (Kiro uniquement, généré automatiquement)</summary>
 
-Sauvegarde automatique en fin de session (`.kiro/hooks/auto-save-session.kiro.hook`) :
-
-```json
-{
-  "enabled": true,
-  "name": "Sauvegarde Automatique de Session",
-  "version": "1",
-  "when": { "type": "agentStop" },
-  "then": {
-    "type": "askAgent",
-    "prompt": "Appeler auto_save pour catégoriser et sauvegarder les décisions, modifications, erreurs et tâches en attente"
-  }
-}
-```
-
-Vérification du workflow de développement (`.kiro/hooks/dev-workflow-check.kiro.hook`) :
+Sauvegarde automatique en fin de session supprimée. Vérification du workflow de développement (`.kiro/hooks/dev-workflow-check.kiro.hook`) :
 
 ```json
 {
@@ -366,7 +351,6 @@ Ou ajouter env dans la configuration MCP :
 - 🔧 Correction de la génération de configuration MCP dans `run install` (sys.executable + champs complets)
 - 📋 Suivi des problèmes CRUD et archivage (Tableau de bord Web ajout/édition/archivage/suppression + association mémoires)
 - 👆 Clic n'importe où sur la ligne pour ouvrir le modal d'édition (mémoires/problèmes/tags)
-- 🛡️ Protection contre le déclenchement en chaîne des Hooks (combinaison agentStop + promptSubmit ne duplique plus l'injection de règles)
 - 🔒 Règles de blocage appliquées lors des continuations de session/transferts de contexte (reconfirmation requise)
 
 ### v0.2.1

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 class StateRepo:
@@ -8,7 +8,7 @@ class StateRepo:
         self.project_dir = project_dir
 
     def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now().astimezone().isoformat()
 
     def get(self) -> dict | None:
         row = self.conn.execute("SELECT * FROM session_state WHERE project_dir=?", (self.project_dir,)).fetchone()

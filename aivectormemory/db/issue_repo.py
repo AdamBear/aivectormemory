@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 class IssueRepo:
@@ -7,7 +7,7 @@ class IssueRepo:
         self.project_dir = project_dir
 
     def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now().astimezone().isoformat()
 
     def _next_number(self, date: str) -> int:
         row = self.conn.execute(
@@ -16,7 +16,7 @@ class IssueRepo:
         ).fetchone()
         return (row["max_num"] or 0) + 1
 
-    def create(self, date: str, title: str, content: str = "", memory_id: str = "") -> dict:
+    def create(self, date: str, title: str, content: str = "", memory_id: str = "", parent_id: int = 0) -> dict:
         # 去重：同项目 + 同标题 + 未归档 → 返回已有记录
         existing = self.conn.execute(
             "SELECT * FROM issues WHERE project_dir=? AND title=? AND status!='archived'",
@@ -27,8 +27,8 @@ class IssueRepo:
         now = self._now()
         num = self._next_number(date)
         cur = self.conn.execute(
-            "INSERT INTO issues (project_dir, issue_number, date, title, status, content, memory_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (self.project_dir, num, date, title, "pending", content, memory_id, now, now)
+            "INSERT INTO issues (project_dir, issue_number, date, title, status, content, memory_id, parent_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (self.project_dir, num, date, title, "pending", content, memory_id, parent_id, now, now)
         )
         self.conn.commit()
         return {"id": cur.lastrowid, "issue_number": num, "date": date}
@@ -38,7 +38,9 @@ class IssueRepo:
                                 (issue_id, self.project_dir)).fetchone()
         if not row:
             return None
-        allowed = {"title", "status", "content", "memory_id"}
+        allowed = {"title", "status", "content", "memory_id",
+                   "description", "investigation", "root_cause", "solution",
+                   "files_changed", "test_result", "notes", "feature_id"}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return dict(row)
@@ -54,14 +56,22 @@ class IssueRepo:
         if not row:
             return None
         now = self._now()
+        r = dict(row)
         self.conn.execute(
-            "INSERT INTO issues_archive (project_dir, issue_number, date, title, content, memory_id, archived_at, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            (row["project_dir"], row["issue_number"], row["date"], row["title"], row["content"], row["memory_id"] if "memory_id" in row.keys() else "", now, row["created_at"])
+            """INSERT INTO issues_archive (project_dir, issue_number, date, title, content, memory_id,
+               description, investigation, root_cause, solution, files_changed, test_result, notes,
+               feature_id, parent_id, status, archived_at, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (r["project_dir"], r["issue_number"], r["date"], r["title"], r["content"],
+             r.get("memory_id", ""),
+             r.get("description", ""), r.get("investigation", ""), r.get("root_cause", ""),
+             r.get("solution", ""), r.get("files_changed", "[]"), r.get("test_result", ""),
+             r.get("notes", ""), r.get("feature_id", ""), r.get("parent_id", 0),
+             r.get("status", ""), now, r["created_at"])
         )
         self.conn.execute("DELETE FROM issues WHERE id=?", (issue_id,))
         self.conn.commit()
-        memory_id = row["memory_id"] if "memory_id" in row.keys() else ""
-        return {"issue_id": issue_id, "archived_at": now, "memory_id": memory_id}
+        return {"issue_id": issue_id, "archived_at": now, "memory_id": r.get("memory_id", "")}
 
     def list_by_date(self, date: str | None = None, status: str | None = None) -> list[dict]:
         sql, params = "SELECT * FROM issues WHERE project_dir=?", [self.project_dir]
@@ -86,6 +96,12 @@ class IssueRepo:
         row = self.conn.execute("SELECT * FROM issues WHERE id=? AND project_dir=?",
                                 (issue_id, self.project_dir)).fetchone()
         return dict(row) if row else None
+
+    def get_archived_by_id(self, issue_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM issues_archive WHERE id=? AND project_dir=?",
+                                (issue_id, self.project_dir)).fetchone()
+        return dict(row) if row else None
+
     def delete(self, issue_id: int) -> dict | None:
         row = self.conn.execute("SELECT * FROM issues WHERE id=? AND project_dir=?",
                                 (issue_id, self.project_dir)).fetchone()

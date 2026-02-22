@@ -6,7 +6,14 @@ def read_message() -> dict | None:
     line = sys.stdin.readline()
     if not line:
         return None
-    return json.loads(line.strip())
+    line = line.strip()
+    if not line:
+        return read_message()
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        print(f"[aivectormemory] Skipped non-JSON input: {line[:120]}", file=sys.stderr)
+        return read_message()
 
 
 def write_message(msg: dict):

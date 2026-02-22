@@ -271,22 +271,7 @@ progress[], recent_changes[], pending[]
 <details>
 <summary>🔗 Hooks 設定範例（Kiro 專屬，自動產生）</summary>
 
-會話結束自動儲存（`.kiro/hooks/auto-save-session.kiro.hook`）：
-
-```json
-{
-  "enabled": true,
-  "name": "會話結束自動儲存",
-  "version": "1",
-  "when": { "type": "agentStop" },
-  "then": {
-    "type": "askAgent",
-    "prompt": "呼叫 auto_save，將本次對話的決策、修改、踩坑、待辦分類儲存"
-  }
-}
-```
-
-開發流程檢查（`.kiro/hooks/dev-workflow-check.kiro.hook`）：
+會話結束自動儲存已移除，開發流程檢查（`.kiro/hooks/dev-workflow-check.kiro.hook`）：
 
 ```json
 {
@@ -366,7 +351,6 @@ export HF_ENDPOINT=https://hf-mirror.com
 - 🔧 `run install` MCP 配置生成修復（sys.executable + 完整欄位）
 - 📋 問題追蹤增刪改歸檔（Web 看板新增/編輯/歸檔/刪除 + 記憶關聯）
 - 👆 所有列表頁點擊行任意位置彈出編輯彈窗（記憶/問題/標籤）
-- 🛡️ Hook 鏈式觸發防護（agentStop + promptSubmit 組合不再重複注入規則）
 - 🔒 會話延續/上下文轉移時阻塞規則強制生效（跨會話必須重新確認）
 
 ### v0.2.1

@@ -59,7 +59,7 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 收到用户消息后，严谨认真理解用户消息的意思然后判断消息类型，询问仅限闲聊，进度、讨论规则、简单确认不记录问题文档，其他所有情况必须需要记录问题文档，然后告诉用户方案，等用户确认后再执行
 
 **⚠️ 回复时用自然语言说明判断结果**，例如：
-- "这是个询问，验证相应文件代码后回答"
+- "这是个询问，验证后回答"（所有回答必须先从 MCP 记忆或代码验证事实）
 - "这是个问题，方案如下..."
 - "这个问题需要记录"
 
@@ -101,6 +101,10 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 1. 严格按照本规则来执行
 2. **调用 `status`** 获取会话状态（阻塞、进度、待处理）
 3. 然后按问题跟踪步骤执行
+4. **调用 `task`**（action: list, feature_id 以 `_sys/` 开头, status: pending）检查系统任务
+   - 有系统任务 → 提示用户，确认后执行
+5. **调用 `task`**（action: list, feature_id 以 `issue/` 开头, status 不为 completed）检查未完成的问题修复任务
+   - 有未完成任务 → 提示用户上次中断的问题和进度
 
 **⚠️ 无论用户问什么问题，第一个动作必须是调用 status**
 
@@ -108,11 +112,9 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 
 # 项目知识（从 MCP 加载）
 
-**每次新会话加载项目知识**：`recall`（tags: ["项目知识"], scope: "project", top_k: 100）
+**每次新会话加载项目知识**：`recall`（tags: ["项目知识"], scope: "project", top_k: 20, brief: true）
 
-**加载用户偏好**：`recall`（tags: ["preference"], scope: "user", top_k: 20）
-
-**查询踩坑记录**：`recall`（query: 关键词, tags: ["踩坑"]）
+**加载用户偏好**：`recall`（tags: ["preference"], scope: "user", top_k: 20, brief: true）
 
 # 开发规则
 
@@ -122,28 +124,53 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 
 ---
 
-## 何时调用
+## 何时调用（按阶段）
 
-- 新会话开始时：调用 `status`（不传参数）读取上次的工作状态，了解进度和阻塞情况
-- 遇到踩坑/技术要点时：调用 `remember` 记录，标签加 "踩坑"
-- 需要查找历史经验时：调用 `recall` 语义搜索，或按标签精确查询
-- 发现 bug 或待处理事项时：调用 `track`（action: create）记录问题
-- 修复问题后：调用 `track`（action: update）更新排查内容和结论
-- 问题关闭时：调用 `track`（action: archive）归档
-- 任务进度变化时：调用 `status`（传 state 参数）更新当前任务、进度、最近修改
-- 对话结束前：调用 `auto_save` 保存本次对话的决策、修改、踩坑、待办、偏好
+### 1. 会话启动阶段
+- `status`（不传参数）→ 读取上次工作状态、阻塞情况
+- `task`（action: list）→ 检查系统任务和未完成问题
+- `recall`（tags: 项目知识/偏好）→ 加载项目知识和用户偏好
+
+### 2. 问题处理阶段（用户提出问题后）
+- `track`（action: create）→ 记录问题标题
+- `status`（传 state）→ 更新 pending
+- `recall`（query/tags: 踩坑）→ 查相关踩坑记录
+- 查看代码，找根因
+- `track`（action: update）→ 更新根因和方案
+- 向用户说明方案，`status` 设阻塞等确认
+- ⚠️ 过程中发现新问题：判断是否阻塞当前问题
+  - 不阻塞 → `track create` 记录新问题标题，继续当前问题
+  - 阻塞 → `track update` 当前问题标注阻塞，切换处理新问题
+
+### 3. 开发阶段（用户确认方案后）
+- 修改代码并自测
+- 过程中遇到踩坑 → `remember` 记录，标签加 "踩坑"
+- `track`（action: update）→ 更新修复结论
+- `status` 设阻塞等用户验证
+- ⚠️ 过程中发现新问题：同阶段 2 的分支处理逻辑
+
+### 4. 任务管理阶段（拆分/执行任务时）
+- `task`（action: batch_create）→ 批量创建任务（主数据源）
+- `task`（action: update）→ 完成子任务后更新状态，同步 tasks.md
+- `task`（action: list）→ 查看任务进度
+- `status`（传 state）→ 任务进度变化时更新
+
+### 5. 收尾阶段（用户确认验证通过后）
+- `track`（action: archive）→ 归档问题
+- `status`（is_blocked: false）→ 清除阻塞
 
 ## 工具速查
 
 | 工具 | 用途 | 关键参数 |
 |------|------|----------|
 | remember | 存入记忆 | content, tags, scope(project/user) |
-| recall | 语义搜索记忆 | query, tags, scope, top_k |
+| recall | 语义搜索记忆 | query, tags, scope, top_k, source(manual/auto_save) |
 | forget | 删除记忆 | memory_id / memory_ids |
 | status | 会话状态管理 | state(不传=读取, 传=更新) |
 | track | 问题跟踪 | action(create/update/archive/list) |
+| task | 任务管理 | action(batch_create/update/list), feature_id, tasks, children |
 | digest | 记忆摘要 | scope, since_sessions, tags |
-| auto_save | 自动保存会话 | decisions, modifications, pitfalls, todos, preferences |
+| auto_save | 自动保存会话 | preferences |
 
 ---
 
@@ -208,16 +235,19 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 - 上一个会话中的用户确认不能延续到新会话，必须重新确认
 - 禁止自行清除阻塞
 
-**⚠️ context transfer / compact 续接规则**：
-- context transfer 或 compact 后，如果 summary 中有明确的未完成工作（如"审查未完成"、"正在读取文件"），必须先完成该工作再汇报，不能只说一句话就停止
-- 判断标准：summary 中是否包含"未完成"、"in-progress"、"正在"、"Not yet"等关键词，或 status 中 current_task 仍有进行中的任务
-- 完成未完成工作后，再根据阻塞状态决定是否等待用户反馈
-
 ---
 
-## 任务文档
+## 任务管理
 
-**任务文档位置**：`{tasks_path}`（或项目对应的任务文档）
+**⚠️ MCP task 工具是任务数据的唯一主数据源**，看板从 task 工具读取数据展示。
+
+**任务管理流程**：
+1. 拆分任务时：调用 `task`（action: batch_create）写入数据库
+2. 完成子任务时：调用 `task`（action: update）更新状态
+3. 如果项目有 tasks.md（如 Kiro spec）：同步更新对应 checkbox
+4. tasks.md 是辅助文档，task 工具数据才是看板展示的来源
+
+**任务文档位置**：`.kiro/specs/*/tasks.md`（或项目对应的任务文档）
 
 **任务文档规范**：
 - 每个任务细化到最小可执行单元
@@ -277,33 +307,6 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 **修改后**：
 - 运行相关测试或编译验证
 - 确认修改不影响其他功能
-
----
-
-## Spec 流程与任务管理（通过 MCP task 管理）
-
-**触发条件**：用户提出新功能、重构、升级等需要多步骤实现的需求时
-
-**流程**：
-1. 创建 spec 目录：`{specs_path}`
-2. 编写 `requirements.md`：需求文档，明确功能范围和验收标准
-3. 用户确认需求后，编写 `design.md`：设计文档，技术方案和架构
-4. 用户确认设计后，编写 `tasks.md`：任务文档，拆分为最小可执行单元
-5. 同步调用 `task`（action: batch_create, feature_id: spec 目录名）将任务写入数据库
-6. 按任务文档顺序执行，每完成一个子任务：
-   - 更新 `tasks.md` 中对应 checkbox
-   - 调用 `task`（action: update）更新数据库状态
-7. 全部完成后调用 `task`（action: list）确认无遗漏
-
-**feature_id 规范**：与 spec 目录名一致，使用 kebab-case（如 `task-scheduler`、`v0.2.5-upgrade`）
-
-**与 track 的分工**：
-- spec/task：功能开发的计划和进度管理
-- track：开发过程中发现的 bug 和问题追踪
-- 执行 task 过程中发现 bug → `track create` 记录，修完后继续 task
-
-**不需要 spec 的场景**：
-- 单文件修改、简单 bug 修复、配置调整 → 直接 `track create` 走问题追踪流程
 
 ---
 
@@ -395,7 +398,22 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 - 禁止说"大部分"、"基本上"、"应该是"等模糊词
 - 禁止未经验证就下结论
 
+---
 
+## auto_save 规范
+
+对话结束前调用 auto_save，将本次对话的关键信息分类保存：
+
+1. decisions：本次对话做出的关键决策
+2. modifications：本次对话修改的文件和内容摘要
+3. pitfalls：本次对话遇到的坑和解决方案
+4. todos：本次对话产生的待办事项
+5. preferences：用户表达的技术偏好（scope 固定 user，跨项目通用）
+
+规则：
+- 每条内容必须具体、可追溯，禁止模糊描述
+- 没有的分类传空数组，不要编造
+- scope 默认 project（preferences 固定 user）
 """
 
 
@@ -652,44 +670,23 @@ def _write_hooks(hooks_dir: Path) -> list[str]:
     return results
 
 
-TASKS_PATH_MAP = {
-    "Kiro": ".kiro/specs/{feature}/tasks.md",
-    "Cursor": ".cursor/tasks.md",
-    "Windsurf": ".windsurf/tasks.md",
-    "Trae": ".trae/tasks.md",
-}
-TASKS_PATH_DEFAULT = "tasks.md（项目根目录）"
-
-SPECS_PATH_MAP = {
-    "Kiro": ".kiro/specs/{feature_id}/",
-    "Cursor": ".cursor/specs/{feature_id}/",
-    "Windsurf": ".windsurf/specs/{feature_id}/",
-    "Trae": ".trae/specs/{feature_id}/",
-}
-SPECS_PATH_DEFAULT = "docs/specs/{feature_id}/（项目根目录）"
-
-
-def _write_steering(filepath: Path, mode: str, ide_name: str = "") -> bool:
-    raw = STEERING_CONTENT.strip()
-    tasks_path = TASKS_PATH_MAP.get(ide_name, TASKS_PATH_DEFAULT)
-    specs_path = SPECS_PATH_MAP.get(ide_name, SPECS_PATH_DEFAULT)
-    content = raw.replace("{tasks_path}", tasks_path).replace("{specs_path}", specs_path)
+def _write_steering(filepath: Path, mode: str) -> bool:
     if mode == "file":
-        final = content + "\n"
-        if filepath.exists() and filepath.read_text("utf-8").strip() == content:
+        content = STEERING_CONTENT.strip() + "\n"
+        if filepath.exists() and filepath.read_text("utf-8").strip() == content.strip():
             return False
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        filepath.write_text(final, encoding="utf-8")
+        filepath.write_text(content, encoding="utf-8")
         return True
     if mode == "append":
         existing = filepath.read_text("utf-8") if filepath.exists() else ""
-        block = f"\n{STEERING_MARKER}\n{content}\n"
+        block = f"\n{STEERING_MARKER}\n{STEERING_CONTENT.strip()}\n"
         if STEERING_MARKER in existing:
             start = existing.index(STEERING_MARKER)
             next_marker = existing.find("\n<!-- ", start + len(STEERING_MARKER))
             end = next_marker if next_marker != -1 else len(existing)
             old_block = existing[start:end]
-            new_block = f"{STEERING_MARKER}\n{content}\n"
+            new_block = f"{STEERING_MARKER}\n{STEERING_CONTENT.strip()}\n"
             if old_block.strip() == new_block.strip():
                 return False
             updated = existing[:start] + new_block + existing[end:]
@@ -790,7 +787,7 @@ def run_install(project_dir: str | None = None):
         if p is None:
             continue
         tag = " (全局)" if is_global else ""
-        valid_ides.append((f"{name}{tag}", name, path_fn, fmt, steering_fn, steering_mode, hooks_fn))
+        valid_ides.append((f"{name}{tag}", path_fn, fmt, steering_fn, steering_mode, hooks_fn))
 
     ide_indices = _choose("选择 IDE（编号，逗号分隔多选，a=全部）", valid_ides, allow_all=True)
     if ide_indices is None:
@@ -801,7 +798,7 @@ def run_install(project_dir: str | None = None):
     print()
     root = Path(pdir)
     for idx in ide_indices:
-        label, ide_name, path_fn, fmt, steering_fn, steering_mode, hooks_fn = valid_ides[idx]
+        label, path_fn, fmt, steering_fn, steering_mode, hooks_fn = valid_ides[idx]
         filepath = path_fn(root)
         if filepath is None:
             continue
@@ -814,7 +811,7 @@ def run_install(project_dir: str | None = None):
         # 4. 写入 Steering 规则
         if steering_fn and steering_mode:
             steering_path = steering_fn(root)
-            s_changed = _write_steering(steering_path, steering_mode, ide_name)
+            s_changed = _write_steering(steering_path, steering_mode)
             s_status = "✓ 已生成" if s_changed else "- 无变更"
             print(f"  {s_status}  {label} Steering 规则 → {steering_path.relative_to(root)}")
 

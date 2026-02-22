@@ -76,6 +76,10 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span data-i18n="issueTracking">问题跟踪</span>
       </li>
+      <li class="nav-item" data-tab="tasks">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span data-i18n="taskManagement">任务管理</span>
+      </li>
     </ul>
     <div class="sidebar-decor">
       <svg viewBox="0 0 192 60" fill="none">
@@ -185,6 +189,23 @@
         </div>
       </div>
       <div id="issue-list" class="card-list"></div>
+    </section>
+    <section id="tab-tasks" class="tab-panel">
+      <div class="page-header"><h2 class="page-title" data-i18n="taskManagement">任务管理</h2></div>
+      <div class="toolbar">
+        <select id="task-feature-filter" class="filter-select">
+          <option value="" data-i18n="allFeatures">全部功能</option>
+        </select>
+        <select id="task-status-filter" class="filter-select">
+          <option value="" data-i18n="allStatus">全部状态</option>
+          <option value="pending" data-i18n="status.pending">待处理</option>
+          <option value="in_progress" data-i18n="status.in_progress">进行中</option>
+          <option value="completed" data-i18n="status.completed">已完成</option>
+          <option value="skipped" data-i18n="status.skipped">已跳过</option>
+        </select>
+        <div class="toolbar-right"><button class="btn btn--primary btn--sm" onclick="addFeatureGroup()" data-i18n="addFeatureGroup">新增功能组</button></div>
+      </div>
+      <div id="task-list" class="task-groups"></div>
     </section>
   </main>
 </div>

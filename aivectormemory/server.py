@@ -31,8 +31,8 @@ class MCPServer:
                 (self.cm.project_dir,)
             ).fetchone()
             self._session_id = (row["max_sid"] or 0)
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc).isoformat()
+            from datetime import datetime
+            now = datetime.now().astimezone().isoformat()
             self.cm.conn.execute(
                 "INSERT OR IGNORE INTO session_state (project_dir, last_session_id, updated_at) VALUES (?,?,?)",
                 (self.cm.project_dir, self._session_id, now)
@@ -101,10 +101,15 @@ class MCPServer:
             req_id = msg.get("id")
             params = msg.get("params", {})
             handler = handlers.get(method)
-            if handler:
-                handler(req_id, params)
-            elif req_id is not None:
-                write_message(make_error(req_id, METHOD_NOT_FOUND, f"Unknown method: {method}"))
+            try:
+                if handler:
+                    handler(req_id, params)
+                elif req_id is not None:
+                    write_message(make_error(req_id, METHOD_NOT_FOUND, f"Unknown method: {method}"))
+            except Exception as e:
+                print(f"[aivectormemory] Unhandled error in {method}: {e}", file=sys.stderr)
+                if req_id is not None:
+                    write_message(make_error(req_id, INTERNAL_ERROR, str(e)))
         self.cm.close()
         print("[aivectormemory] MCP Server stopped", file=sys.stderr)
 
