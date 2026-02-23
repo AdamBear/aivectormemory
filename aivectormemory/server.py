@@ -17,7 +17,7 @@ class MCPServer:
         self._initialized = False
 
     def _init_db(self):
-        init_db(self.cm.conn)
+        init_db(self.cm.conn, engine=self.engine)
         row = self.cm.conn.execute(
             "SELECT last_session_id FROM session_state WHERE project_dir=?",
             (self.cm.project_dir,)

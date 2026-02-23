@@ -1,10 +1,12 @@
+import json
 from datetime import datetime
 
 
 class IssueRepo:
-    def __init__(self, conn, project_dir: str = ""):
+    def __init__(self, conn, project_dir: str = "", engine=None):
         self.conn = conn
         self.project_dir = project_dir
+        self.engine = engine
 
     def _now(self) -> str:
         return datetime.now().astimezone().isoformat()
@@ -57,7 +59,7 @@ class IssueRepo:
             return None
         now = self._now()
         r = dict(row)
-        self.conn.execute(
+        cur = self.conn.execute(
             """INSERT INTO issues_archive (project_dir, issue_number, date, title, content, memory_id,
                description, investigation, root_cause, solution, files_changed, test_result, notes,
                feature_id, parent_id, status, archived_at, created_at)
@@ -69,6 +71,14 @@ class IssueRepo:
              r.get("notes", ""), r.get("feature_id", ""), r.get("parent_id", 0),
              r.get("status", ""), now, r["created_at"])
         )
+        archive_id = cur.lastrowid
+        if self.engine:
+            text = f"{r['title']} {r.get('description','')} {r.get('root_cause','')} {r.get('solution','')}"
+            emb = self.engine.encode(text)
+            self.conn.execute(
+                "INSERT INTO vec_issues_archive (id, embedding) VALUES (?,?)",
+                (archive_id, json.dumps(emb))
+            )
         self.conn.execute("DELETE FROM issues WHERE id=?", (issue_id,))
         self.conn.commit()
         return {"issue_id": issue_id, "archived_at": now, "memory_id": r.get("memory_id", "")}
@@ -121,4 +131,24 @@ class IssueRepo:
         self.conn.execute("DELETE FROM issues_archive WHERE id=?", (archive_id,))
         self.conn.commit()
         return {"archive_id": archive_id, "deleted": True, "memory_id": memory_id}
+
+    def search_archive_by_vector(self, embedding: list[float], top_k: int = 5) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT id, distance FROM vec_issues_archive WHERE embedding MATCH ? AND k = ?",
+            (json.dumps(embedding), top_k * 2)
+        ).fetchall()
+        results = []
+        for r in rows:
+            archive = self.conn.execute(
+                "SELECT * FROM issues_archive WHERE id=? AND project_dir=?",
+                (r["id"], self.project_dir)
+            ).fetchone()
+            if archive:
+                d = dict(archive)
+                d["similarity"] = round(1 - (r["distance"] ** 2) / 2, 4)
+                results.append(d)
+            if len(results) >= top_k:
+                break
+        return results
+
 

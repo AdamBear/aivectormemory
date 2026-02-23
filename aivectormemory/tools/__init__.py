@@ -22,7 +22,7 @@ TOOL_DEFINITIONS = [
                 "scope": {"type": "string", "enum": ["user", "project", "all"], "default": "all"},
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "按标签过滤（无 query 时走纯标签精确查询）"},
                 "top_k": {"type": "integer", "default": 5, "description": "返回结果数量"},
-                "source": {"type": "string", "enum": ["manual", "auto_save"], "description": "按来源过滤：manual=手动记忆, auto_save=自动保存。不传则不过滤"},
+                "source": {"type": "string", "enum": ["manual", "experience"], "description": "按来源过滤：manual=项目知识, experience=归档经验。不传则不过滤"},
                 "brief": {"type": "boolean", "default": False, "description": "精简模式：true 时只返回 content 和 tags，省略 id/session_id/created_at 等元数据，适合启动加载场景节省上下文"}
             }
         }
@@ -90,21 +90,6 @@ TOOL_DEFINITIONS = [
         }
     },
     {
-        "name": "digest",
-        "description": "提取待整理的记忆列表，按 session 范围和标签过滤，由 AI 端归纳总结。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "scope": {"type": "string", "enum": ["user", "project", "all"], "default": "project"},
-                "since_sessions": {"type": "integer", "default": 20, "description": "最近 N 次会话"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "按标签过滤"},
-                "compress": {"type": "boolean", "default": False, "description": "是否触发智能归纳压缩，合并同主题碎片、清理过时记忆"},
-                "limit": {"type": "integer", "default": 50, "description": "单次返回最大条数，防止上下文溢出。返回 remaining 字段提示剩余条数"},
-                "max_chars": {"type": "integer", "default": 8000, "description": "返回内容总字符数上限，单条超500字自动截断，防止撑爆上下文窗口"}
-            }
-        }
-    },
-    {
         "name": "task",
         "description": "任务管理：batch_create/update/list 三个 action。通过 feature_id 关联 spec 文档和问题追踪。",
         "inputSchema": {
@@ -157,16 +142,11 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "auto_save",
-        "description": "【每次对话结束前必须调用】自动保存本次对话的关键信息。将决策、修改、踩坑、待办、偏好分类存储为独立记忆，自动打标签和去重。偏好类记忆固定 scope=user（跨项目通用）。",
+        "description": "【每次对话结束前必须调用】自动保存用户偏好。",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "decisions": {"type": "array", "items": {"type": "string"}, "description": "本次对话做出的关键决策"},
-                "modifications": {"type": "array", "items": {"type": "string"}, "description": "本次对话修改的文件和内容摘要"},
-                "pitfalls": {"type": "array", "items": {"type": "string"}, "description": "本次对话遇到的坑和解决方案"},
-                "todos": {"type": "array", "items": {"type": "string"}, "description": "本次对话产生的待办事项"},
-                "preferences": {"type": "array", "items": {"type": "string"}, "description": "用户表达的技术偏好、设计风格倾向、架构选择习惯（固定 scope=user，跨项目通用）"},
-                "scope": {"type": "string", "enum": ["user", "project"], "default": "project", "description": "作用域，默认项目级（preferences 固定 user）"},
+                "preferences": {"type": "array", "items": {"type": "string"}, "description": "用户表达的技术偏好（固定 scope=user，跨项目通用）"},
                 "extra_tags": {"type": "array", "items": {"type": "string"}, "description": "额外标签"}
             }
         }
@@ -178,7 +158,6 @@ from aivectormemory.tools.recall import handle_recall
 from aivectormemory.tools.forget import handle_forget
 from aivectormemory.tools.status import handle_status
 from aivectormemory.tools.track import handle_track
-from aivectormemory.tools.digest import handle_digest
 from aivectormemory.tools.auto_save import handle_auto_save
 from aivectormemory.tools.task import handle_task
 from aivectormemory.tools.readme import handle_readme
@@ -189,7 +168,6 @@ TOOL_HANDLERS = {
     "forget": handle_forget,
     "status": handle_status,
     "track": handle_track,
-    "digest": handle_digest,
     "auto_save": handle_auto_save,
     "task": handle_task,
     "readme": handle_readme,

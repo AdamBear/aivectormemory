@@ -1,7 +1,7 @@
 import json
 from urllib.parse import urlparse, parse_qs
-from aivectormemory.config import USER_SCOPE_DIR
 from aivectormemory.db.memory_repo import MemoryRepo
+from aivectormemory.db.user_memory_repo import UserMemoryRepo
 from aivectormemory.db.state_repo import StateRepo
 from aivectormemory.db.issue_repo import IssueRepo
 from aivectormemory.db.task_repo import TaskRepo
@@ -123,11 +123,17 @@ def get_memories(cm, params, pdir):
     offset = int(params.get("offset", [0])[0])
 
     repo = MemoryRepo(cm.conn, pdir)
-    filter_dir = pdir if scope == "project" else (USER_SCOPE_DIR if scope == "user" else None)
+    user_repo = UserMemoryRepo(cm.conn)
 
     if tag:
-        tag_filter_dir = filter_dir if filter_dir is not None else USER_SCOPE_DIR
-        all_rows = repo.list_by_tags([tag], scope=scope, project_dir=tag_filter_dir, limit=9999, source=source)
+        if scope == "user":
+            all_rows = user_repo.list_by_tags([tag], limit=9999, source=source)
+        elif scope == "project":
+            all_rows = repo.list_by_tags([tag], scope="project", project_dir=pdir, limit=9999, source=source)
+        else:
+            proj_rows = repo.list_by_tags([tag], scope="project", project_dir=pdir, limit=9999, source=source)
+            user_rows = user_repo.list_by_tags([tag], limit=9999, source=source)
+            all_rows = proj_rows + user_rows
         if query:
             q = query.lower()
             all_rows = [r for r in all_rows if q in r.get("content", "").lower()]
@@ -135,7 +141,12 @@ def get_memories(cm, params, pdir):
         results = all_rows[offset:offset + limit]
     elif exclude_tags:
         ex_set = set(exclude_tags.split(","))
-        all_rows = repo.get_all(limit=9999, offset=0, project_dir=filter_dir)
+        if scope == "user":
+            all_rows = user_repo.get_all(limit=9999)
+        elif scope == "project":
+            all_rows = repo.get_all(limit=9999, offset=0, project_dir=pdir)
+        else:
+            all_rows = repo.get_all(limit=9999, offset=0) + user_repo.get_all(limit=9999)
         all_rows = [r for r in all_rows if not ex_set.intersection(json.loads(r["tags"]) if isinstance(r["tags"], str) else (r["tags"] or []))]
         if source:
             all_rows = [r for r in all_rows if r.get("source", "manual") == source]
@@ -145,10 +156,20 @@ def get_memories(cm, params, pdir):
         total = len(all_rows)
         results = all_rows[offset:offset + limit]
     else:
-        rows = repo.get_all(limit=limit, offset=offset, project_dir=filter_dir)
+        if scope == "user":
+            rows = user_repo.get_all(limit=limit, offset=offset)
+            total = user_repo.count()
+        elif scope == "project":
+            rows = repo.get_all(limit=limit, offset=offset, project_dir=pdir)
+            total = repo.count(project_dir=pdir)
+        else:
+            rows = repo.get_all(limit=limit, offset=offset)
+            total = repo.count() + user_repo.count()
+            if len(rows) < limit:
+                user_rows = user_repo.get_all(limit=limit - len(rows))
+                rows = rows + user_rows
         if source:
             rows = [r for r in rows if r.get("source", "manual") == source]
-        total = repo.count(project_dir=filter_dir)
         results = [r for r in rows if not query or query.lower() in r.get("content", "").lower()] if query else rows
 
     return {"memories": results, "total": total}
@@ -157,6 +178,10 @@ def get_memories(cm, params, pdir):
 def get_memory_detail(cm, mid, pdir):
     repo = MemoryRepo(cm.conn, pdir)
     mem = repo.get_by_id(mid)
+    if mem:
+        return mem
+    user_repo = UserMemoryRepo(cm.conn)
+    mem = user_repo.get_by_id(mid)
     return mem or {"error": "not found"}
 
 
@@ -164,6 +189,11 @@ def put_memory(handler, cm, mid, pdir):
     body = _read_body(handler)
     repo = MemoryRepo(cm.conn, pdir)
     mem = repo.get_by_id(mid)
+    table = "memories"
+    if not mem:
+        user_repo = UserMemoryRepo(cm.conn)
+        mem = user_repo.get_by_id(mid)
+        table = "user_memories"
     if not mem:
         return {"error": "not found"}
     now = repo._now()
@@ -175,14 +205,19 @@ def put_memory(handler, cm, mid, pdir):
     if updates:
         updates["updated_at"] = now
         set_clause = ",".join(f"{k}=?" for k in updates)
-        cm.conn.execute(f"UPDATE memories SET {set_clause} WHERE id=?", [*updates.values(), mid])
+        cm.conn.execute(f"UPDATE {table} SET {set_clause} WHERE id=?", [*updates.values(), mid])
         cm.conn.commit()
+    if table == "user_memories":
+        return UserMemoryRepo(cm.conn).get_by_id(mid)
     return repo.get_by_id(mid)
 
 
 def delete_memory(cm, mid, pdir):
     repo = MemoryRepo(cm.conn, pdir)
     if repo.delete(mid):
+        return {"deleted": True, "id": mid}
+    user_repo = UserMemoryRepo(cm.conn)
+    if user_repo.delete(mid):
         return {"deleted": True, "id": mid}
     return {"error": "not found"}
 
@@ -191,7 +226,13 @@ def delete_memories_batch(handler, cm, pdir):
     body = _read_body(handler)
     ids = body.get("ids", [])
     repo = MemoryRepo(cm.conn, pdir)
-    deleted = [mid for mid in ids if repo.delete(mid)]
+    user_repo = UserMemoryRepo(cm.conn)
+    deleted = []
+    for mid in ids:
+        if repo.delete(mid):
+            deleted.append(mid)
+        elif user_repo.delete(mid):
+            deleted.append(mid)
     return {"deleted_count": len(deleted), "ids": deleted}
 
 
@@ -332,29 +373,30 @@ def put_task(handler, cm, tid, pdir):
     return {"task": result}
 
 
-def _merged_tag_counts(repo, pdir):
-    proj = repo.get_tag_counts(project_dir=pdir)
-    user = repo.get_tag_counts(project_dir=USER_SCOPE_DIR)
+def _merged_tag_counts(mem_repo, user_repo, pdir):
+    proj = mem_repo.get_tag_counts(project_dir=pdir)
+    user = user_repo.get_tag_counts()
     merged = dict(proj)
     for k, v in user.items():
         merged[k] = merged.get(k, 0) + v
     return merged
 
 
-def _merged_ids_with_tag(repo, tag, pdir):
-    proj = repo.get_ids_with_tag(tag, project_dir=pdir)
-    user = repo.get_ids_with_tag(tag, project_dir=USER_SCOPE_DIR)
+def _merged_ids_with_tag(mem_repo, user_repo, tag, pdir):
+    proj = mem_repo.get_ids_with_tag(tag, project_dir=pdir)
+    user = user_repo.get_ids_with_tag(tag)
     seen = {m["id"] for m in proj}
     return proj + [m for m in user if m["id"] not in seen]
 
 
 def get_stats(cm, pdir):
     repo = MemoryRepo(cm.conn, pdir)
+    user_repo = UserMemoryRepo(cm.conn)
     issue_repo = IssueRepo(cm.conn, pdir)
 
     proj_count = repo.count(project_dir=pdir)
-    user_count = repo.count(project_dir=USER_SCOPE_DIR)
-    total_count = repo.count()
+    user_count = user_repo.count()
+    total_count = repo.count() + user_count
 
     all_issues = issue_repo.list_by_date()
     status_counts = {}
@@ -364,7 +406,7 @@ def get_stats(cm, pdir):
     archived_issues = issue_repo.list_archived()
     status_counts["archived"] = len(archived_issues)
 
-    tag_counts = _merged_tag_counts(repo, pdir)
+    tag_counts = _merged_tag_counts(repo, user_repo, pdir)
 
     return {
         "memories": {"project": proj_count, "user": user_count, "total": total_count},
@@ -376,8 +418,9 @@ def get_stats(cm, pdir):
 def get_tags(cm, params, pdir):
     query = params.get("query", [None])[0]
     repo = MemoryRepo(cm.conn, pdir)
+    user_repo = UserMemoryRepo(cm.conn)
     proj = repo.get_tag_counts(project_dir=pdir)
-    user = repo.get_tag_counts(project_dir=USER_SCOPE_DIR)
+    user = user_repo.get_tag_counts()
     all_names = sorted(set(proj) | set(user), key=lambda k: -(proj.get(k, 0) + user.get(k, 0)))
     tags = [{"name": k, "count": proj.get(k, 0) + user.get(k, 0),
              "project_count": proj.get(k, 0), "user_count": user.get(k, 0)} for k in all_names]
@@ -394,12 +437,14 @@ def rename_tag(handler, cm, pdir):
     if not old_name or not new_name:
         return {"error": "old_name and new_name required"}
     repo = MemoryRepo(cm.conn, pdir)
+    user_repo = UserMemoryRepo(cm.conn)
     updated = 0
-    for m in _merged_ids_with_tag(repo, old_name, pdir):
+    for m in _merged_ids_with_tag(repo, user_repo, old_name, pdir):
         tags = json.loads(m["tags"]) if isinstance(m.get("tags"), str) else m.get("tags", [])
         tags = [new_name if t == old_name else t for t in tags]
         tags = list(dict.fromkeys(tags))
-        cm.conn.execute("UPDATE memories SET tags=?, updated_at=? WHERE id=?",
+        table = "user_memories" if user_repo.get_by_id(m["id"]) else "memories"
+        cm.conn.execute(f"UPDATE {table} SET tags=?, updated_at=? WHERE id=?",
                         (json.dumps(tags, ensure_ascii=False), repo._now(), m["id"]))
         updated += 1
     cm.conn.commit()
@@ -413,17 +458,19 @@ def merge_tags(handler, cm, pdir):
     if not source_tags or not target_name:
         return {"error": "source_tags and target_name required"}
     repo = MemoryRepo(cm.conn, pdir)
+    user_repo = UserMemoryRepo(cm.conn)
     updated = 0
     seen = set()
     for src in source_tags:
-        for m in _merged_ids_with_tag(repo, src, pdir):
+        for m in _merged_ids_with_tag(repo, user_repo, src, pdir):
             if m["id"] in seen:
                 continue
             seen.add(m["id"])
             tags = json.loads(m["tags"]) if isinstance(m.get("tags"), str) else m.get("tags", [])
             tags = [target_name if t in source_tags else t for t in tags]
             tags = list(dict.fromkeys(tags))
-            cm.conn.execute("UPDATE memories SET tags=?, updated_at=? WHERE id=?",
+            table = "user_memories" if user_repo.get_by_id(m["id"]) else "memories"
+            cm.conn.execute(f"UPDATE {table} SET tags=?, updated_at=? WHERE id=?",
                             (json.dumps(tags, ensure_ascii=False), repo._now(), m["id"]))
             updated += 1
     cm.conn.commit()
@@ -436,17 +483,19 @@ def delete_tags(handler, cm, pdir):
     if not tag_names:
         return {"error": "tags required"}
     repo = MemoryRepo(cm.conn, pdir)
+    user_repo = UserMemoryRepo(cm.conn)
     updated = 0
     seen = set()
     for tn in tag_names:
-        for m in _merged_ids_with_tag(repo, tn, pdir):
+        for m in _merged_ids_with_tag(repo, user_repo, tn, pdir):
             if m["id"] in seen:
                 continue
             seen.add(m["id"])
             tags = json.loads(m["tags"]) if isinstance(m.get("tags"), str) else m.get("tags", [])
             new_tags = [t for t in tags if t not in tag_names]
             if len(new_tags) != len(tags):
-                cm.conn.execute("UPDATE memories SET tags=?, updated_at=? WHERE id=?",
+                table = "user_memories" if user_repo.get_by_id(m["id"]) else "memories"
+                cm.conn.execute(f"UPDATE {table} SET tags=?, updated_at=? WHERE id=?",
                                 (json.dumps(new_tags, ensure_ascii=False), repo._now(), m["id"]))
                 updated += 1
     cm.conn.commit()
@@ -491,16 +540,20 @@ def get_projects(cm):
             tags = json.loads(r["tags"]) if isinstance(r["tags"], str) else (r["tags"] or [])
             projects[pd]["tags"].update(tags)
 
-    user_tags = projects.get(USER_SCOPE_DIR, {}).get("tags", set())
+    user_repo = UserMemoryRepo(conn)
+    user_tag_counts = user_repo.get_tag_counts()
+    user_tags = set(user_tag_counts.keys())
+    user_count = user_repo.count()
 
     result = []
     for pd, info in sorted(projects.items(), key=lambda x: -x[1]["memories"]):
-        if pd == USER_SCOPE_DIR or not pd:
+        if not pd:
             continue
         result.append({
             "project_dir": pd,
             "name": pd.replace("\\", "/").rsplit("/", 1)[-1] if pd else "unknown",
             "memories": info["memories"],
+            "user_memories": user_count,
             "issues": info["issues"],
             "tags": len(info["tags"] | user_tags),
         })
@@ -541,8 +594,8 @@ def browse_directory(params):
     return {"path": path.replace("\\", "/"), "dirs": dirs}
 
 def delete_project(cm, project_dir):
-    if not project_dir or project_dir == USER_SCOPE_DIR:
-        return {"success": False, "error": "Cannot delete global scope"}
+    if not project_dir:
+        return {"success": False, "error": "Cannot delete empty project"}
     conn = cm.conn
     mem_ids = [r["id"] for r in conn.execute("SELECT id FROM memories WHERE project_dir = ?", (project_dir,)).fetchall()]
     if mem_ids:
@@ -560,12 +613,25 @@ def delete_project(cm, project_dir):
 def export_memories(cm, params, pdir):
     scope = params.get("scope", ["all"])[0]
     repo = MemoryRepo(cm.conn, pdir)
-    filter_dir = pdir if scope == "project" else (USER_SCOPE_DIR if scope == "user" else None)
-    memories = repo.get_all(limit=999999, project_dir=filter_dir)
+    user_repo = UserMemoryRepo(cm.conn)
+
+    if scope == "user":
+        memories = user_repo.get_all(limit=999999)
+        vec_table = "vec_user_memories"
+    elif scope == "project":
+        memories = repo.get_all(limit=999999, project_dir=pdir)
+        vec_table = "vec_memories"
+    else:
+        memories = repo.get_all(limit=999999) + user_repo.get_all(limit=999999)
+        vec_table = None  # 需要按记忆判断
+
     result = []
     for m in memories:
-        row = cm.conn.execute("SELECT embedding FROM vec_memories WHERE id=?", (m["id"],)).fetchone()
         entry = dict(m)
+        tbl = vec_table
+        if tbl is None:
+            tbl = "vec_user_memories" if user_repo.get_by_id(m["id"]) else "vec_memories"
+        row = cm.conn.execute(f"SELECT embedding FROM {tbl} WHERE id=?", (m["id"],)).fetchone()
         if row:
             raw = row["embedding"]
             if isinstance(raw, (bytes, memoryview)):
@@ -591,23 +657,34 @@ def import_memories(handler, cm, pdir):
     if not items:
         return {"error": "no memories to import"}
     repo = MemoryRepo(cm.conn, pdir)
+    user_repo = UserMemoryRepo(cm.conn)
     imported, skipped = 0, 0
     for item in items:
         mid = item.get("id", "")
-        if not mid or repo.get_by_id(mid):
+        if not mid or repo.get_by_id(mid) or user_repo.get_by_id(mid):
             skipped += 1
             continue
         now = repo._now()
         tags = item.get("tags", "[]")
         tags_str = json.dumps(tags, ensure_ascii=False) if isinstance(tags, list) else tags
-        cm.conn.execute(
-            "INSERT INTO memories (id, content, tags, scope, project_dir, session_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-            (mid, item.get("content", ""), tags_str, item.get("scope", "project"),
-             item.get("project_dir", pdir), item.get("session_id", 0), item.get("created_at", now), now)
-        )
+        scope = item.get("scope", "project")
         embedding = item.get("embedding")
-        if embedding:
-            cm.conn.execute("INSERT INTO vec_memories (id, embedding) VALUES (?,?)", (mid, json.dumps(embedding)))
+        if scope == "user":
+            cm.conn.execute(
+                "INSERT INTO user_memories (id, content, tags, source, session_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                (mid, item.get("content", ""), tags_str, item.get("source", "manual"),
+                 item.get("session_id", 0), item.get("created_at", now), now)
+            )
+            if embedding:
+                cm.conn.execute("INSERT INTO vec_user_memories (id, embedding) VALUES (?,?)", (mid, json.dumps(embedding)))
+        else:
+            cm.conn.execute(
+                "INSERT INTO memories (id, content, tags, scope, project_dir, session_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                (mid, item.get("content", ""), tags_str, scope,
+                 item.get("project_dir", pdir), item.get("session_id", 0), item.get("created_at", now), now)
+            )
+            if embedding:
+                cm.conn.execute("INSERT INTO vec_memories (id, embedding) VALUES (?,?)", (mid, json.dumps(embedding)))
         imported += 1
     cm.conn.commit()
     return {"imported": imported, "skipped": skipped}
@@ -628,10 +705,26 @@ def search_memories(handler, cm, pdir):
 
     embedding = engine.encode(query)
     repo = MemoryRepo(cm.conn, pdir)
-    if tags:
-        results = repo.search_by_vector_with_tags(embedding, tags, top_k=top_k, scope=scope, project_dir=pdir)
+    user_repo = UserMemoryRepo(cm.conn)
+
+    if scope == "user":
+        if tags:
+            results = user_repo.search_by_vector_with_tags(embedding, tags, top_k=top_k)
+        else:
+            results = user_repo.search_by_vector(embedding, top_k=top_k)
+    elif scope == "project":
+        if tags:
+            results = repo.search_by_vector_with_tags(embedding, tags, top_k=top_k, scope="project", project_dir=pdir)
+        else:
+            results = repo.search_by_vector(embedding, top_k=top_k, scope="project", project_dir=pdir)
     else:
-        results = repo.search_by_vector(embedding, top_k=top_k, scope=scope, project_dir=pdir)
+        if tags:
+            proj_results = repo.search_by_vector_with_tags(embedding, tags, top_k=top_k, scope="project", project_dir=pdir)
+            user_results = user_repo.search_by_vector_with_tags(embedding, tags, top_k=top_k)
+        else:
+            proj_results = repo.search_by_vector(embedding, top_k=top_k, scope="project", project_dir=pdir)
+            user_results = user_repo.search_by_vector(embedding, top_k=top_k)
+        results = sorted(proj_results + user_results, key=lambda x: x.get("distance", 0))[:top_k]
 
     for r in results:
         r["similarity"] = round(1 - (r.get("distance", 0) ** 2) / 2, 4)

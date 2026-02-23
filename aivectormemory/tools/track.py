@@ -2,16 +2,7 @@ import json
 import re
 from datetime import date
 from aivectormemory.db.issue_repo import IssueRepo
-from aivectormemory.db.task_repo import TaskRepo
 from aivectormemory.errors import success_response
-
-ISSUE_STEPS = [
-    "排查问题原因",
-    "确定解决方案",
-    "修改代码",
-    "自测验证",
-    "等待用户验证",
-]
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -29,12 +20,12 @@ def _validate_issue_id(val) -> int:
         raise ValueError(f"issue_id must be an integer, got: {val}")
 
 
-def handle_track(args, *, cm, **_):
+def handle_track(args, *, cm, engine=None, **_):
     action = args.get("action")
     if not action:
         raise ValueError("action is required")
 
-    repo = IssueRepo(cm.conn, cm.project_dir)
+    repo = IssueRepo(cm.conn, cm.project_dir, engine=engine)
     today = date.today().isoformat()
 
     if action == "create":
@@ -43,13 +34,6 @@ def handle_track(args, *, cm, **_):
             raise ValueError("title is required for create")
         d = _validate_date(args.get("date", today))
         result = repo.create(d, title, args.get("content", ""), args.get("memory_id", ""), args.get("parent_id", 0))
-        # 非去重时自动创建关联任务
-        if not result.get("deduplicated"):
-            feature_id = f"issue/{result['issue_number']}"
-            task_repo = TaskRepo(cm.conn, cm.project_dir)
-            steps = [{"title": s, "sort_order": i + 1} for i, s in enumerate(ISSUE_STEPS)]
-            task_repo.batch_create(feature_id, steps, task_type="system")
-            repo.update(result["id"], feature_id=feature_id)
         return json.dumps(success_response(**result))
 
     elif action == "update":
@@ -67,16 +51,9 @@ def handle_track(args, *, cm, **_):
         content = args.get("content")
         if content:
             repo.update(issue_id, content=content)
-        # 归档前获取 feature_id（归档后 get_by_id 查不到）
-        issue = repo.get_by_id(issue_id)
-        fid = issue.get("feature_id") if issue else None
         result = repo.archive(issue_id)
         if not result:
             raise ValueError(f"Issue {issue_id} not found")
-        # 批量完成关联任务
-        if fid:
-            task_repo = TaskRepo(cm.conn, cm.project_dir)
-            task_repo.complete_by_feature(fid)
         return json.dumps(success_response(**result))
 
     elif action == "delete":
@@ -87,7 +64,6 @@ def handle_track(args, *, cm, **_):
         return json.dumps(success_response(**result))
 
     elif action == "list":
-        # 支持按 issue_id 查单条（活跃+归档都查）
         issue_id = args.get("issue_id")
         if issue_id is not None:
             issue_id = _validate_issue_id(issue_id)

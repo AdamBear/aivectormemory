@@ -42,57 +42,7 @@ STEERING_MARKER = "<!-- aivectormemory-steering -->"
 
 STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 
-本项目已配置 AIVectorMemory MCP Server，提供以下 7 个工具。请在合适的时机主动调用。
-
----
-
-## ⚠️ IDENTITY & TONE
-
-- Role：你是首席工程师兼高级数据科学家
-- Voice：Professional，Concise，Result-Oriented。No "I hope this helps"
-- Authority：The user is the Lead Architect. Execute explicit commands immediately (not questions).
-
----
-
-## ⚠️ 消息类型判断
-
-收到用户消息后，严谨认真理解用户消息的意思然后判断消息类型，询问仅限闲聊，进度、讨论规则、简单确认不记录问题文档，其他所有情况必须需要记录问题文档，然后告诉用户方案，等用户确认后再执行
-
-**⚠️ 回复时用自然语言说明判断结果**，例如：
-- "这是个询问，验证相应文件代码后回答"
-- "这是个问题，方案如下..."
-- "这个问题需要记录"
-
----
-
-## ⚠️ 核心原则
-
-1. **任何操作前必须验证，不能假设，不能靠记忆**。
-2. **遇到需要处理的问题时禁止盲目测试，必须查看问题对应的代码文件，必须找到问题的根本原因，必须与实际错误对应**。
-3. **禁止口头承诺，口头答应，一切以测试通过为准**。
-4. **任何文件修改前必须查看代码强制严谨思考**。
-5. **开发、自测过程中禁止让用户手动操作，能自己执行的不要让用户做**。
-
----
-
-## ⚠️ IDE 卡死防范
-
-- **禁止** `$(...)` + 管道组合
-- **禁止** MySQL `-e` 执行多条语句
-- **禁止** `python3 -c "..."` 执行多行脚本（超过2行必须写成 .py 文件再执行）
-- **禁止** `lsof -ti:端口` 不加 ignoreWarning（会被安全检查拦截）
-- **正确做法**：SQL 写入 `.sql` 文件用 `< data/xxx.sql` 执行；Python 验证脚本写成 .py 文件用 `python3 xxx.py` 执行；端口检查用 `lsof -ti:端口` + ignoreWarning:true
-
----
-
-## ⚠️ 自测要求
-
-**禁止让用户手动操作** - 能自己执行的，不要让用户做
-
-- Python：`python -m pytest` 或直接运行脚本验证
-- MCP Server：通过 stdio 发送 JSON-RPC 消息验证
-- Web 看板：Playwright 验证
-- 自测通过后才能说"等待验证"
+本项目已配置 AIVectorMemory MCP Server，提供以下 6 个工具。请在合适的时机主动调用。
 
 ---
 
@@ -131,7 +81,7 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 - 修复问题后：调用 `track`（action: update）更新排查内容和结论
 - 问题关闭时：调用 `track`（action: archive）归档
 - 任务进度变化时：调用 `status`（传 state 参数）更新当前任务、进度、最近修改
-- 对话结束前：调用 `auto_save` 保存本次对话的决策、修改、踩坑、待办、偏好
+- 对话结束前：调用 `auto_save` 保存用户偏好
 
 ## 工具速查
 
@@ -142,16 +92,15 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 | forget | 删除记忆 | memory_id / memory_ids |
 | status | 会话状态管理 | state(不传=读取, 传=更新) |
 | track | 问题跟踪 | action(create/update/archive/list) |
-| digest | 记忆摘要 | scope, since_sessions, tags |
-| auto_save | 自动保存会话 | decisions, modifications, pitfalls, todos, preferences |
+| auto_save | 自动保存偏好 | preferences, extra_tags |
 
 ---
 
 ## 知识库（通过 MCP remember/recall 管理）
 
-**遇到问题必记**：命令失败、框架踩坑、技术要点 → `remember`（标签：`踩坑`）
+**查询踩坑记录**：`recall`（source: "experience", query: 关键词）
 
-**查询踩坑记录**：`recall`（query: 关键词, tags: ["踩坑"]）
+**查询项目知识**：`recall`（tags: ["项目知识"], scope: "project"）
 
 ---
 
@@ -419,22 +368,35 @@ HOOKS_CONFIGS = [
                     "## ⚠️ 消息类型判断\n\n"
                     "收到用户消息后，严谨认真理解用户消息的意思然后判断消息类型，询问仅限闲聊，进度、讨论规则、简单确认不记录问题文档，其他所有情况必须需要记录问题文档，然后告诉用户方案，等用户确认后再执行\n\n"
                     "**⚠️ 回复时用自然语言说明判断结果**，例如：\n"
-                    "- \"这是个询问，验证后回答\"（所有回答必须先从 MCP 记忆或代码验证事实）\n"
+                    "- \"这是个询问，验证相应文件代码后回答\"\n"
                     "- \"这是个问题，方案如下...\"\n"
                     "- \"这个问题需要记录\"\n\n"
                     "---\n\n"
                     "## ⚠️ 核心原则\n\n"
-                    "1. 任何操作前必须验证，不能假设，不能靠记忆\n"
-                    "2. 遇到问题禁止盲目测试，必须查看代码找到根本原因\n"
-                    "3. 禁止口头承诺，一切以测试通过为准\n"
-                    "4. 任何文件修改前必须查看代码严谨思考\n"
-                    "5. 开发、自测过程中禁止让用户手动操作\n\n"
+                    "1. **任何操作前必须验证，不能假设，不能靠记忆**。\n"
+                    "2. **遇到需要处理的问题时禁止盲目测试，必须查看问题对应的代码文件，必须找到问题的根本原因，必须与实际错误对应**。\n"
+                    "3. **禁止口头承诺，口头答应，一切以测试通过为准**。\n"
+                    "4. **任何文件修改前必须查看代码强制严谨思考**。\n"
+                    "5. **开发、自测过程中禁止让用户手动操作，能自己执行的不要让用户做**。\n\n"
+                    "---\n\n"
+                    "## ⚠️ IDE 卡死防范\n\n"
+                    "- **禁止** `$(...)` + 管道组合\n"
+                    "- **禁止** MySQL `-e` 执行多条语句\n"
+                    "- **禁止** `python3 -c \"...\"` 执行多行脚本（超过2行必须写成 .py 文件再执行）\n"
+                    "- **禁止** `lsof -ti:端口` 不加 ignoreWarning（会被安全检查拦截）\n"
+                    "- **正确做法**：SQL 写入 `.sql` 文件用 `< data/xxx.sql` 执行；Python 验证脚本写成 .py 文件用 `python3 xxx.py` 执行；端口检查用 `lsof -ti:端口` + ignoreWarning:true\n\n"
+                    "---\n\n"
                     "## ⚠️ 自测要求\n\n"
-                    "禁止让用户手动操作 - 能自己执行的，不要让用户做\n\n"
-                    "- Python：python -m pytest 或直接运行脚本验证\n"
+                    "**禁止让用户手动操作** - 能自己执行的，不要让用户做\n\n"
+                    "- Python：`python -m pytest` 或直接运行脚本验证\n"
                     "- MCP Server：通过 stdio 发送 JSON-RPC 消息验证\n"
                     "- Web 看板：Playwright 验证\n"
-                    "- 自测通过后才能说\"等待验证\""
+                    "- 自测通过后才能说\"等待验证\"\n\n"
+                    "---\n\n"
+                    "## ⚠️ 开发规则\n\n"
+                    "> 禁止口头承诺，一切以测试通过为准。\n"
+                    "> 任何文件修改前必须强制严谨思考。\n"
+                    "> 遇到报错或异常时严禁盲目测试，必须分析问题根本原因。"
                 ),
             },
             "shortName": "dev-workflow-check",
@@ -728,7 +690,7 @@ def _build_config(cmd: str, args: list[str], fmt: str) -> dict:
         "command": cmd,
         "args": args,
         "disabled": False,
-        "autoApprove": ["remember", "recall", "forget", "status", "track", "digest", "auto_save"],
+        "autoApprove": ["remember", "recall", "forget", "status", "track", "auto_save"],
     }
     if env_block:
         cfg["env"] = env_block

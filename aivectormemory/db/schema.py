@@ -1,3 +1,5 @@
+import json
+from datetime import datetime
 from aivectormemory.config import USER_SCOPE_DIR
 
 SCHEMA_VERSION_TABLE = """
@@ -96,6 +98,7 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_tasks_feature ON tasks(feature_id)",
     "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
     "CREATE INDEX IF NOT EXISTS idx_memories_source ON memories(source)",
+    "CREATE INDEX IF NOT EXISTS idx_user_memories_tags ON user_memories(tags)",
 ]
 
 TASKS_TABLE = """
@@ -113,9 +116,32 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TEXT NOT NULL
 )"""
 
-ALL_TABLES = [SCHEMA_VERSION_TABLE, MEMORIES_TABLE, VEC_MEMORIES_TABLE, SESSION_STATE_TABLE, ISSUES_TABLE, ISSUES_ARCHIVE_TABLE, TASKS_TABLE]
+USER_MEMORIES_TABLE = """
+CREATE TABLE IF NOT EXISTS user_memories (
+    id TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    tags TEXT NOT NULL DEFAULT '[]',
+    source TEXT NOT NULL DEFAULT 'manual',
+    session_id INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)"""
 
-CURRENT_SCHEMA_VERSION = 6
+VEC_USER_MEMORIES_TABLE = """
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_user_memories USING vec0(
+    id TEXT PRIMARY KEY,
+    embedding FLOAT[384]
+)"""
+
+VEC_ISSUES_ARCHIVE_TABLE = """
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_issues_archive USING vec0(
+    id INTEGER PRIMARY KEY,
+    embedding FLOAT[384]
+)"""
+
+ALL_TABLES = [SCHEMA_VERSION_TABLE, MEMORIES_TABLE, VEC_MEMORIES_TABLE, SESSION_STATE_TABLE, ISSUES_TABLE, ISSUES_ARCHIVE_TABLE, TASKS_TABLE, USER_MEMORIES_TABLE, VEC_USER_MEMORIES_TABLE, VEC_ISSUES_ARCHIVE_TABLE]
+
+CURRENT_SCHEMA_VERSION = 7
 
 
 def _get_schema_version(conn) -> int:
@@ -131,7 +157,7 @@ def _set_schema_version(conn, version: int):
     conn.execute("UPDATE schema_version SET version=?", (version,))
 
 
-def init_db(conn):
+def init_db(conn, engine=None):
     for sql in ALL_TABLES:
         conn.execute(sql)
 
@@ -236,6 +262,95 @@ def init_db(conn):
         ]:
             if col not in task_cols:
                 conn.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typ} NOT NULL DEFAULT {default}")
+
+    if ver < 7:
+        import sys
+        # 1.5: 创建 3 张新表
+        conn.execute(USER_MEMORIES_TABLE)
+        conn.execute(VEC_USER_MEMORIES_TABLE)
+        conn.execute(VEC_ISSUES_ARCHIVE_TABLE)
+
+        # 1.6: scope=user 记录从 memories 迁移到 user_memories
+        user_rows = conn.execute(
+            "SELECT * FROM memories WHERE project_dir=?", (USER_SCOPE_DIR,)
+        ).fetchall()
+        for r in user_rows:
+            conn.execute(
+                "INSERT INTO user_memories (id, content, tags, source, session_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                (r["id"], r["content"], r["tags"], r["source"] or "manual", r["session_id"], r["created_at"], r["updated_at"])
+            )
+            vec_row = conn.execute("SELECT embedding FROM vec_memories WHERE id=?", (r["id"],)).fetchone()
+            if vec_row:
+                conn.execute("INSERT INTO vec_user_memories (id, embedding) VALUES (?,?)", (r["id"], vec_row["embedding"]))
+                conn.execute("DELETE FROM vec_memories WHERE id=?", (r["id"],))
+            conn.execute("DELETE FROM memories WHERE id=?", (r["id"],))
+
+        # 1.7: 删除 auto_save 碎片（source=auto_save 且标签非 preference）
+        conn.execute(
+            "DELETE FROM vec_memories WHERE id IN ("
+            "  SELECT id FROM memories WHERE source='auto_save' AND tags NOT LIKE '%\"preference\"%'"
+            ")"
+        )
+        conn.execute(
+            "DELETE FROM memories WHERE source='auto_save' AND tags NOT LIKE '%\"preference\"%'"
+        )
+
+        # 1.8: 踩坑记录迁移到 issues_archive（含双标签处理）
+        pitfall_rows = conn.execute(
+            "SELECT * FROM memories WHERE tags LIKE '%\"踩坑\"%'"
+        ).fetchall()
+        now_ts = datetime.now().astimezone().isoformat()
+        for r in pitfall_rows:
+            content = r["content"]
+            first_line = content.split("\n")[0].lstrip("# ").strip()[:100]
+            created_date = r["created_at"][:10]
+            tags_raw = r["tags"]
+            tags_list = json.loads(tags_raw) if isinstance(tags_raw, str) else (tags_raw or [])
+            has_project_knowledge = "项目知识" in tags_list
+
+            cur = conn.execute(
+                """INSERT INTO issues_archive (project_dir, issue_number, date, title, content, description,
+                   root_cause, solution, status, archived_at, created_at)
+                   VALUES (?,0,?,?,?,?,?,?,?,?,?)""",
+                (r["project_dir"], created_date, first_line, "", content, "", "", "completed", now_ts, r["created_at"])
+            )
+
+            if has_project_knowledge:
+                new_tags = [t for t in tags_list if t != "踩坑"]
+                conn.execute("UPDATE memories SET tags=? WHERE id=?",
+                             (json.dumps(new_tags, ensure_ascii=False), r["id"]))
+            else:
+                conn.execute("DELETE FROM vec_memories WHERE id=?", (r["id"],))
+                conn.execute("DELETE FROM memories WHERE id=?", (r["id"],))
+
+        # 1.9: 删除 ISSUE_STEPS 产生的系统任务
+        conn.execute(
+            "DELETE FROM tasks WHERE task_type='system' AND feature_id LIKE 'issue/%'"
+        )
+
+        # 1.10: issues_archive 批量生成 embedding（超时防护）
+        archive_count = conn.execute("SELECT COUNT(*) FROM issues_archive").fetchone()[0]
+        if engine and archive_count <= 50:
+            archives = conn.execute(
+                "SELECT id, title, description, root_cause, solution FROM issues_archive"
+            ).fetchall()
+            gen_count = 0
+            for a in archives:
+                existing = conn.execute(
+                    "SELECT id FROM vec_issues_archive WHERE id=?", (a["id"],)
+                ).fetchone()
+                if existing:
+                    continue
+                text = f"{a['title']} {a['description'] or ''} {a['root_cause'] or ''} {a['solution'] or ''}"
+                emb = engine.encode(text)
+                conn.execute(
+                    "INSERT INTO vec_issues_archive (id, embedding) VALUES (?,?)",
+                    (a["id"], json.dumps(emb))
+                )
+                gen_count += 1
+            print(f"[aivectormemory] v7 migration: generated embeddings for {gen_count} archived issues", file=sys.stderr)
+        elif archive_count > 50:
+            print(f"[aivectormemory] v7 migration: skipped embedding generation for {archive_count} archived issues (>50, lazy loading)", file=sys.stderr)
 
     for sql in INDEXES:
         conn.execute(sql)

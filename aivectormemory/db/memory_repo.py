@@ -2,7 +2,6 @@ import json
 import sqlite3
 import uuid
 from datetime import datetime
-from aivectormemory.config import USER_SCOPE_DIR
 
 
 class MemoryRepo:
@@ -16,7 +15,7 @@ class MemoryRepo:
     def insert(self, content: str, tags: list[str], scope: str, session_id: int,
                embedding: list[float], dedup_threshold: float = 0.95,
                source: str = "manual") -> dict:
-        pdir = USER_SCOPE_DIR if scope == "user" else self.project_dir
+        pdir = self.project_dir
         dup = self.find_duplicate(embedding, dedup_threshold, pdir)
         if dup:
             return self.update(dup["id"], content, tags, session_id, embedding)
@@ -76,8 +75,6 @@ class MemoryRepo:
             if not mem:
                 continue
             if scope == "project" and mem["project_dir"] != project_dir:
-                continue
-            if scope == "user" and mem["project_dir"] != USER_SCOPE_DIR:
                 continue
             if source and mem.get("source", "manual") != source:
                 continue
@@ -157,9 +154,6 @@ class MemoryRepo:
         if scope == "project":
             sql += " AND project_dir=?"
             params.append(project_dir)
-        elif scope == "user":
-            sql += f" AND project_dir=?"
-            params.append(USER_SCOPE_DIR)
         if source:
             sql += " AND source=?"
             params.append(source)
