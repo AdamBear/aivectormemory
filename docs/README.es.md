@@ -341,6 +341,13 @@ O agregar env en la configuración MCP:
 
 ## 📋 Registro de Cambios
 
+### v0.2.7
+
+**Extracción automática de palabras clave**
+- 🔑 `remember`/`auto_save` extraen automáticamente palabras clave del contenido y las añaden a los tags — la IA ya no necesita pasar tags completos manualmente
+- 🔑 Utiliza segmentación de palabras china jieba + extracción por regex en inglés, extrayendo con precisión palabras clave de alta calidad en contenido mixto chino-inglés
+- 🔑 Nueva dependencia `jieba>=0.42`
+
 ### v0.2.6
 
 **Reestructuración de reglas Steering**

@@ -341,6 +341,13 @@ Ou ajouter env dans la configuration MCP :
 
 ## 📋 Journal des Modifications
 
+### v0.2.7
+
+**Extraction automatique de mots-clés**
+- 🔑 `remember`/`auto_save` extraient automatiquement les mots-clés du contenu pour compléter les tags — l'IA n'a plus besoin de transmettre manuellement des tags complets
+- 🔑 Utilise la segmentation chinoise jieba + extraction par regex anglaise, extraction précise de mots-clés pour les contenus mixtes chinois-anglais
+- 🔑 Nouvelle dépendance `jieba>=0.42`
+
 ### v0.2.6
 
 **Restructuration des règles Steering**

@@ -341,6 +341,13 @@ Or add env to MCP config:
 
 ## 📋 Changelog
 
+### v0.2.7
+
+**Automatic Keyword Extraction**
+- 🔑 `remember`/`auto_save` automatically extract keywords from content and append to tags — AI no longer needs to manually pass complete tags
+- 🔑 Uses jieba Chinese word segmentation + English regex extraction, accurately extracting high-quality keywords from mixed Chinese-English content
+- 🔑 New dependency `jieba>=0.42`
+
 ### v0.2.6
 
 **Steering Rules Refactoring**

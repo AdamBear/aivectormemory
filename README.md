@@ -342,6 +342,13 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ## 📋 更新日志
 
+### v0.2.7
+
+**自动关键词提取**
+- 🔑 `remember`/`auto_save` 自动从内容提取关键词补充到 tags，无需 AI 手动传递完整标签
+- 🔑 采用 jieba 中文分词 + 英文正则提取，中英文混合内容均能准确提取高质量关键词
+- 🔑 新增 `jieba>=0.42` 依赖
+
 ### v0.2.6
 
 **Steering 规则重构**

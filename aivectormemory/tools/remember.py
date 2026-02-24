@@ -3,6 +3,7 @@ from aivectormemory.config import DEDUP_THRESHOLD
 from aivectormemory.db.memory_repo import MemoryRepo
 from aivectormemory.db.user_memory_repo import UserMemoryRepo
 from aivectormemory.errors import success_response
+from aivectormemory.tools.keywords import extract_keywords
 
 
 def handle_remember(args, *, cm, engine, session_id, **_):
@@ -16,6 +17,13 @@ def handle_remember(args, *, cm, engine, session_id, **_):
         raise ValueError("tags must be a list")
     if len(content) > 5000:
         content = content[:5000]
+
+    # 自动从 content 提取关键词补充到 tags
+    existing = {t.lower() for t in tags}
+    for kw in extract_keywords(content):
+        if kw.lower() not in existing:
+            tags.append(kw)
+            existing.add(kw.lower())
 
     embedding = engine.encode(content)
 

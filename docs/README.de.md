@@ -341,6 +341,13 @@ Oder env in der MCP-Konfiguration hinzufügen:
 
 ## 📋 Änderungsprotokoll
 
+### v0.2.7
+
+**Automatische Schlüsselwort-Extraktion**
+- 🔑 `remember`/`auto_save` extrahieren automatisch Schlüsselwörter aus dem Inhalt und ergänzen die Tags — KI muss keine vollständigen Tags mehr manuell übergeben
+- 🔑 Verwendet jieba chinesische Wortsegmentierung + englische Regex-Extraktion, präzise Schlüsselwort-Extraktion für gemischte chinesisch-englische Inhalte
+- 🔑 Neue Abhängigkeit `jieba>=0.42`
+
 ### v0.2.6
 
 **Steering-Regeln Umstrukturierung**
