@@ -169,21 +169,36 @@ def get_memories(cm, params, pdir):
         total = len(all_rows)
         results = all_rows[offset:offset + limit]
     else:
-        if scope == "user":
-            rows = user_repo.get_all(limit=limit, offset=offset)
-            total = user_repo.count()
-        elif scope == "project":
-            rows = repo.get_all(limit=limit, offset=offset, project_dir=pdir)
-            total = repo.count(project_dir=pdir)
+        if query:
+            # 有搜索词时：先拿全部数据过滤，再分页
+            if scope == "user":
+                all_rows = user_repo.get_all(limit=9999)
+            elif scope == "project":
+                all_rows = repo.get_all(limit=9999, offset=0, project_dir=pdir)
+            else:
+                all_rows = repo.get_all(limit=9999, offset=0) + user_repo.get_all(limit=9999)
+            if source:
+                all_rows = [r for r in all_rows if r.get("source", "manual") == source]
+            q = query.lower()
+            all_rows = [r for r in all_rows if q in r.get("content", "").lower()]
+            total = len(all_rows)
+            results = all_rows[offset:offset + limit]
         else:
-            rows = repo.get_all(limit=limit, offset=offset)
-            total = repo.count() + user_repo.count()
-            if len(rows) < limit:
-                user_rows = user_repo.get_all(limit=limit - len(rows))
-                rows = rows + user_rows
-        if source:
-            rows = [r for r in rows if r.get("source", "manual") == source]
-        results = [r for r in rows if not query or query.lower() in r.get("content", "").lower()] if query else rows
+            if scope == "user":
+                rows = user_repo.get_all(limit=limit, offset=offset)
+                total = user_repo.count()
+            elif scope == "project":
+                rows = repo.get_all(limit=limit, offset=offset, project_dir=pdir)
+                total = repo.count(project_dir=pdir)
+            else:
+                rows = repo.get_all(limit=limit, offset=offset)
+                total = repo.count() + user_repo.count()
+                if len(rows) < limit:
+                    user_rows = user_repo.get_all(limit=limit - len(rows))
+                    rows = rows + user_rows
+            if source:
+                rows = [r for r in rows if r.get("source", "manual") == source]
+            results = rows
 
     return {"memories": results, "total": total}
 

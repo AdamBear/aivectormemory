@@ -40,204 +40,111 @@ RUNNERS = [
 
 STEERING_MARKER = "<!-- aivectormemory-steering -->"
 
-STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
-
-本项目已配置 AIVectorMemory MCP Server，提供以下 6 个工具。请在合适的时机主动调用。
+STEERING_CONTENT = """# AIVectorMemory - 工作规则
 
 ---
 
-# 启动检查
+## 1. 新会话启动（必须按顺序执行）
 
-1. 严格按照本规则来执行
-2. **调用 `status`** 获取会话状态（阻塞、进度、待处理）
-3. 然后按问题跟踪步骤执行
-
-**⚠️ 无论用户问什么问题，第一个动作必须是调用 status**
-
----
-
-# 项目知识（从 MCP 加载）
-
-**每次新会话加载项目知识**：`recall`（tags: ["项目知识"], scope: "project", top_k: 100）
-
-**加载用户偏好**：`recall`（tags: ["preference"], scope: "user", top_k: 20）
-
-**查询踩坑记录**：`recall`（query: 关键词, tags: ["踩坑"]）
-
-# 开发规则
-
-> 禁止口头承诺，一切以测试通过为准。
-> 任何文件修改前必须强制严谨思考。
-> 遇到报错或异常时严禁盲目测试，必须分析问题根本原因。
+1. `recall`（tags: ["项目知识"], scope: "project", top_k: 100）加载项目知识
+2. `recall`（tags: ["preference"], scope: "user", top_k: 20）加载用户偏好
+3. `status`（不传 state）读取会话状态
+4. 有阻塞（is_blocked=true）→ 汇报阻塞状态，等待用户反馈，**禁止执行任何操作**
+5. 无阻塞 → 进入「收到消息后的处理流程」
 
 ---
 
-## 何时调用
+## 2. 收到消息后的处理流程
 
-- 新会话开始时：调用 `status`（不传参数）读取上次的工作状态，了解进度和阻塞情况
-- 遇到踩坑/技术要点时：调用 `remember` 记录，标签加 "踩坑"
-- 需要查找历史经验时：调用 `recall` 语义搜索，或按标签精确查询
-- 发现 bug 或待处理事项时：调用 `track`（action: create）记录问题
-- 修复问题后：调用 `track`（action: update）更新排查内容和结论
-- 问题关闭时：调用 `track`（action: archive）归档
-- 任务进度变化时：调用 `status`（传 state 参数）更新当前任务、最近修改（progress 自动聚合，无需手动写入）
-- 对话结束前：调用 `auto_save` 保存用户偏好
+**步骤 A：调用 `status` 读取状态**
+- 有阻塞 → 汇报并等待，禁止操作
+- 无阻塞 → 继续
 
-## 工具速查
+**步骤 B：判断消息类型**
+- 闲聊/进度/讨论规则/简单确认 → 直接回答，流程结束
+- 用户纠正错误行为/连续犯错提醒 → 立即 `remember`（tags: ["踩坑", "行为纠正", ...从内容提取关键词], scope: "project"，含：错误行为、用户原话要点、正确做法），然后继续步骤 C
+- 用户表达技术偏好/工作习惯 → `auto_save` 存储偏好
+- 其他（代码问题、bug、功能需求）→ 继续步骤 C
+- 回复时说明判断结果，如："这是个询问"/"这是个问题，需要记录"
 
-| 工具 | 用途 | 关键参数 |
-|------|------|----------|
-| remember | 存入记忆 | content, tags, scope(project/user) |
-| recall | 语义搜索记忆 | query, tags, scope, top_k |
-| forget | 删除记忆 | memory_id / memory_ids |
-| status | 会话状态管理 | state(不传=读取, 传=更新), clear_fields(清空列表字段) |
-| track | 问题跟踪 | action(create/update/archive/list) |
-| auto_save | 自动保存偏好 | preferences, extra_tags |
+**步骤 C：`track create` 记录问题**
+- 无论大小，发现即记录，禁止先修再补
+- `status` 更新 pending
 
----
+**步骤 D：排查**
+- `recall`（query: 相关关键词, tags: ["踩坑", ...从问题提取关键词]）查询踩坑记录
+- 必须查看现有实现代码（禁止凭记忆假设）
+- 涉及数据存储时确认数据流向
+- 禁止盲目测试，必须找到根本原因
+- 发现项目架构/约定/关键实现 → `remember`（tags: ["项目知识", ...从内容提取模块/功能关键词], scope: "project"）
+- `track update` 记录根因和方案
 
-## 知识库（通过 MCP remember/recall 管理）
+**步骤 E：向用户说明方案，确定流程分支**
+- 排查完成后，根据问题复杂度向用户说明方案：
+  - 简单修复（单文件、bug、配置）→ 继续步骤 F（track 修复流程）
+  - 多步骤需求（新功能、重构、升级）→ 用户确认后转 spec/task 流程（见第6节）
+- 无论哪个分支，都必须先等用户确认后才能执行
+- 立即 `status({ is_blocked: true, block_reason: "方案待用户确认" })`
+- 禁止只口头说"等待确认"而不设阻塞，否则会话转移后新会话会误判为已确认
+- 等待用户确认
 
-**记忆质量要求**：
-- 命令类：必须包含完整可执行命令，禁止用别名或缩写
-- 流程类：必须包含具体步骤，不能只写结论
-- 踩坑类：必须包含错误现象、根因、正确做法
+**步骤 F：用户确认后修改代码**
+- 修改前 `recall`（query: 涉及的模块/功能, tags: ["踩坑", ...从模块/功能提取关键词]）检查踩坑记录
+- 修改前必须查看代码严谨思考
+- 一次只修一个问题
+- 修复中发现新问题 → `track create` 记录后继续当前问题
+- 用户中途打断提出新问题 → `track create` 记录，再决定优先级
 
-**查询踩坑记录**：`recall`（source: "experience", query: 关键词）
+**步骤 G：运行测试验证**
+- 运行相关测试，禁止口头承诺
+- `track update` 记录自测结果
 
-**查询项目知识**：`recall`（tags: ["项目知识"], scope: "project"）
+**步骤 H：等待用户验证**
+- 立即 `status({ is_blocked: true, block_reason: "修复完成等待验证" })`
+- 需要用户决策时 → `status({ is_blocked: true, block_reason: "需要用户决策" })`
 
----
-
-## 会话状态（通过 MCP status 管理）
-
-**新会话开始时**：调用 `status`（不传 state 参数 = 读取）
-
-**⚠️ 阻塞状态优先级最高**：
-- 新会话先检查 `is_blocked` 和 `block_reason`
-- 有阻塞 → 等用户反馈，禁止执行任何操作
-- 无阻塞 → 按正常流程执行
-
-**更新时机**：任务开始、完成子任务、遇到问题转向、任务完成
-- 调用 `status` 传 state 参数更新
-
-**MCP status 字段说明**：
-- `is_blocked`：是否阻塞
-- `block_reason`：阻塞原因
-- `next_step`：下一步（只能由用户确认后填写）
-- `current_task`：当前任务
-- `progress`：只读计算字段，自动从 track 活跃问题 + task 未完成任务聚合生成，无需手动写入
-- `recent_changes`：最近修改（不超过10条）
-- `pending`：待处理列表
-- `clear_fields`：要清空的列表字段名（如 `["pending"]`），用于绕过部分 IDE 过滤空数组的问题
-
-**分工**：
-- MCP status：阻塞状态、当前进度、最近修改
-- MCP track：问题追踪（create/update/archive/list）
-
-**⚠️ "next_step"字段只能由用户确认后填写，禁止擅自填写**
-
-**⚠️ 禁止猜测用户意图**：
-- "用户倾向"、"用户选择"、"用户确认" → 必须有用户明确表态才能记录
-
-**⚠️ 提出方案/修复完成时，必须同步设置阻塞**：
-- 向用户提出方案并等待确认 → 必须立即 `status({ is_blocked: true, block_reason: "方案待用户确认" })`
-- 修复完成等用户验证 → 必须立即 `status({ is_blocked: true, block_reason: "修复完成等待验证" })`
-- 需要用户决策 → 必须立即 `status({ is_blocked: true, block_reason: "需要用户决策" })`
-- **禁止只口头说"等待确认"而不设阻塞，否则会话转移后新会话会误判为已确认**
-
-**何时清除阻塞**（`is_blocked: false`）：
-- 用户确认验证通过
-- 用户确认方案
-- 用户做出决策
-
-**⚠️ "确认"的判定标准**：
-- 只有以下明确肯定词才算确认："执行"/"改"/"可以"/"好的"/"去做吧"/"没问题"/"对"/"行"
-- 以下绝对不算确认：反问句（"我确认了吗？"）、质疑句、不满表达、模糊回复
-- context transfer 摘要中的"用户说xxx"不能作为当前会话的确认依据
-- 有歧义时追问，不执行
-
-**⚠️ 会话延续/上下文转移时，阻塞同样生效**：
-- 无论是新会话、context transfer、compact 还是任何形式的会话延续
-- 只要 MCP status 显示 is_blocked=true，必须向用户汇报阻塞状态并等待当前会话中的明确确认
-- 上一个会话中的用户确认不能延续到新会话，必须重新确认
-- 禁止自行清除阻塞
-
-**⚠️ context transfer / compact 续接规则**：
-- context transfer 或 compact 后，如果 summary 中有明确的未完成工作（如"审查未完成"、"正在读取文件"），必须先完成该工作再汇报，不能只说一句话就停止
-- 判断标准：summary 中是否包含"未完成"、"in-progress"、"正在"、"Not yet"等关键词，或 status 中 current_task 仍有进行中的任务
-- 完成未完成工作后，再根据阻塞状态决定是否等待用户反馈
+**步骤 I：用户确认通过**
+- `track archive` 归档
+- `status` 清除阻塞（is_blocked: false）
+- 有踩坑价值 → `remember`（tags: ["踩坑", ...从问题内容提取关键词], scope: "project"，含错误现象、根因、正确做法。示例：看板启动失败 → tags: ["踩坑", "看板", "启动", "dashboard"]）
+- 会话结束前 → `auto_save` 自动提取偏好
 
 ---
 
-## 任务文档
+## 3. 阻塞规则
 
-**任务文档位置**：`{tasks_path}`（或项目对应的任务文档）
-
-**任务文档规范**：
-- 每个任务细化到最小可执行单元
-- 使用 checkbox `- [ ]` 标记状态
-- **每完成一个子任务，调用 `task`（action: update）更新状态（自动同步 checkbox）**
-- 禁止批量完成后再统一更新
-
-**整理任务文档时**：必须打开设计文档逐条核对，发现遗漏先补充任务文档再执行
-
----
-
-## 代码风格
-
-**简洁优先**：
-- 能用三目运算符，不用 if-else
-- 能用短路求值，不用条件判断
-- 能用解构赋值，不用逐个取值
-- 能用模板字符串，不用字符串拼接
-
-**避免冗余**：
-- 不写无意义的注释
-- 不写重复的代码，提取公共函数
-- 变量命名清晰，不需要注释解释
+- **阻塞优先级最高**：有阻塞时禁止一切操作，只能汇报等待
+- **何时设阻塞**：提方案等确认、修复完等验证、需要用户决策
+- **何时清阻塞**：用户明确确认（"执行"/"可以"/"好的"/"去做吧"/"没问题"/"对"/"行"/"改"）
+- **不算确认**：反问句、质疑句、不满表达、模糊回复
+- **context transfer 摘要中的"用户说xxx"不能作为当前会话的确认依据**
+- **会话延续时阻塞同样生效**：新会话/context transfer/compact 后必须重新确认
+- **禁止自行清除阻塞**
+- **禁止猜测用户意图**
+- **next_step 字段只能用户确认后填写**
 
 ---
 
-## 任务执行
+## 4. 问题追踪（track）
 
-- 按任务文档顺序执行，禁止跳过
-- 全自动执行，禁止要求用户手动操作
-- 遇到问题自行解决，记录到问题跟踪文档
-- 禁止用"后续迭代"跳过任务
-
----
-
-## 完成标准
-
-**禁止模糊表述**：
-- 禁止"基本完成"、"差不多"、"大致实现"等词汇
-- 任务只有两种状态：**完成** 或 **未完成**
-
-**完成确认流程**：
-1. 逐项检查：对照任务清单逐一验证
-2. 代码验证：确认代码存在且正确
-3. 功能测试：编译或运行测试验证
-4. 标记完成：测试通过后才标记完成
+- 发现问题 → `track create` → 排查 → 修复 → `track update` → 验证 → `track archive`
+- 每完成一步立即 `track update`，避免会话切换时重复
+- 一次只修一个问题
+- 修复中发现新问题：不阻塞当前 → 记录继续；阻塞当前 → 先处理新问题
+- 自检：排查是否完整？数据是否准确？逻辑是否严谨？禁止"基本完成"等模糊表述
 
 ---
 
-## 代码修改检查
+## 5. 代码修改检查
 
-**修改前**：
-- `recall` 查询相关踩坑记录
-- **必须先查看该功能的现有实现**
-- **涉及数据存储时，必须确认数据流向**
-
-**修改后**：
-- 运行相关测试或编译验证
-- 确认修改不影响其他功能
+**修改前**：`recall` 查踩坑记录 + 查看现有实现 + 确认数据流向
+**修改后**：运行测试验证 + 确认不影响其他功能
 
 ---
 
-## Spec 流程与任务管理（通过 MCP task 管理）
+## 6. Spec 与任务管理（task）
 
-**触发条件**：用户提出新功能、重构、升级等需要多步骤实现的需求时
+**触发条件**：用户提出新功能、重构、升级等需要多步骤实现的需求
 
 **流程**：
 1. 创建 spec 目录：`{specs_path}`
@@ -245,115 +152,81 @@ STEERING_CONTENT = """# AIVectorMemory - 跨会话持久记忆
 3. 用户确认需求后，编写 `design.md`：设计文档，技术方案和架构
 4. 用户确认设计后，编写 `tasks.md`：任务文档，拆分为最小可执行单元
 5. 同步调用 `task`（action: batch_create, feature_id: spec 目录名）将任务写入数据库
-6. 按任务文档顺序执行，每完成一个子任务调用 `task`（action: update）更新状态（自动同步 tasks.md）
+6. 按任务文档顺序执行，每完成一个子任务调用 `task`（action: update）更新状态（自动同步 tasks.md checkbox）
 7. 全部完成后调用 `task`（action: list）确认无遗漏
 
-**feature_id 规范**：与 spec 目录名一致，使用 kebab-case（如 `task-scheduler`、`v0.2.5-upgrade`）
+**feature_id 规范**：与 spec 目录名一致，kebab-case（如 `task-scheduler`、`v0.2.5-upgrade`）
 
-**与 track 的分工**：
-- spec/task：功能开发的计划和进度管理
-- track：开发过程中发现的 bug 和问题追踪
-- 执行 task 过程中发现 bug → `track create` 记录，修完后继续 task
+**与 track 分工**：task 管功能开发计划进度，track 管 bug 问题追踪。执行 task 过程中发现 bug → `track create` 记录，修完后继续 task
 
-**不需要 spec 的场景**：
-- 单文件修改、简单 bug 修复、配置调整 → 直接 `track create` 走问题追踪流程
+**任务文档规范**：
+- 每个任务细化到最小可执行单元，使用 `- [ ]` 标记状态
+- 每完成一个子任务立即 `task update`，禁止批量完成后统一更新
+- 整理任务文档时必须打开设计文档逐条核对，发现遗漏先补充再执行
+- 按顺序执行禁止跳过，禁止用"后续迭代"跳过任务
 
----
+**自检**：整理任务文档时必须打开设计文档逐条核对，发现遗漏先补充再执行。全部完成后 `task list` 确认无遗漏
 
-## 问题追踪（通过 MCP track 管理）
-
-**工具**：`track`（action: create/update/list/archive）
-
-**⚠️ 发现问题必须先记录，禁止跳过**：
-- 无论问题大小，发现即 `track create`，禁止先动手修再补记录
-- 禁止"顺手修了"——没有 track 记录的修复等于没修
-- 执行顺序：发现问题 → `track create` → 排查 → 修复 → `track update` → 验证
-
-**问题处理原则**：
-- 一次只修一个问题
-- 修复过程中发现新问题 → `track create` 记录标题后继续当前问题
-- 用户中途打断提出新问题 → 同样 `track create` 记录，再决定优先级
-- 当前问题修复完成后，再按顺序处理新问题
-
-**发现新问题时判断**：新问题不解决，当前问题能否继续？
-- 能继续 → `track create` 记录标题，继续当前问题
-- 不能继续（阻塞）→ `track update` 当前问题标注阻塞，先处理阻塞问题
-
-**问题记录流程**：
-1. `track create`：记录问题标题 + 调用 `status` 更新 pending
-2. 排查问题原因，`track update` 更新 content（根因、方案）
-3. 向用户说明问题和方案
-4. 修改代码并自测
-5. 自测通过后 `track update` 更新结论，等用户验证
-6. 用户确认没问题 → `track archive` 归档
-
-**⚠️ 问题追踪必须及时更新**：每完成一个步骤立即 `track update`，避免会话切换时重复执行
+**不需要 spec 的场景**：单文件修改、简单 bug、配置调整 → 直接 `track create` 走问题追踪流程
 
 ---
 
-## Git 分支工作流
+## 7. 记忆质量要求
 
-**日常开发在 `dev` 分支**，master 只接受合并：
-- 所有代码修改、提交、推送都在 `dev` 分支
-- **禁止直接在 master 分支提交代码**
-- 提交前先确认当前分支是 `dev`（`git branch --show-current`）
-
-## Git 提交流程
-
-**只有用户明确要求提交时**，才依次执行（禁止用 && 连接）：
-- 先确认当前在 dev 分支：`git branch --show-current`
-- `git add -A`
-- `git commit -m "fix: 问题简述"`
-- `git push origin dev`
-
-**合并到 master**（仅用户明确要求时）：
-- `git checkout master`
-- `git merge dev`
-- `git push`
-- `git checkout dev`
+- tags 规范：必须包含分类标签（踩坑/项目知识/行为纠正）+ 从内容提取的关键词标签（模块名、功能名、技术词），禁止只打一个分类标签
+- 命令类：完整可执行命令，禁止别名缩写
+- 流程类：具体步骤，不能只写结论
+- 踩坑类：错误现象 + 根因 + 正确做法
+- 行为纠正类：错误行为 + 用户原话要点 + 正确做法
 
 ---
 
-## 上下文优化
+## 8. 工具速查
 
-- 优先 `grepSearch` 定位，再 `readFile` 读取特定行
-- 代码修改用 `strReplace`，不要先读后写
+| 工具 | 用途 | 关键参数 |
+|------|------|----------|
+| remember | 存入记忆 | content, tags, scope(project/user) |
+| recall | 语义搜索 | query, tags, scope, top_k |
+| forget | 删除记忆 | memory_id / memory_ids |
+| status | 会话状态 | state(不传=读, 传=更新), clear_fields |
+| track | 问题跟踪 | action(create/update/archive/delete/list) |
+| task | 任务管理 | action(batch_create/update/list/delete/archive), feature_id |
+| readme | README生成 | action(generate/diff), lang, sections |
+| auto_save | 保存偏好 | preferences, extra_tags |
 
----
-
-## 内容迁移/拆分
-
-**⚠️ 禁止凭记忆重写**：
-- 迁移/拆分内容时，必须从原文件逐行复制
-- 禁止凭记忆重写，会导致内容遗漏或精简
-
-**创建索引后必须验证**：
-- 索引中引用的所有文件都必须存在
-- 每个文件的内容必须与原文件对应章节完全一致
-
----
-
-## 错误处理
-
-**反复失败时**：
-1. 记录已尝试的方法
-2. 换一种思路解决
-3. 仍然失败则询问用户
+**status 字段说明**：
+- `is_blocked`：是否阻塞
+- `block_reason`：阻塞原因
+- `next_step`：下一步（只能用户确认后填写）
+- `current_task`：当前任务
+- `progress`：只读计算字段，自动从 track + task 聚合，无需手动写入
+- `recent_changes`：最近修改（不超过10条）
+- `pending`：待处理列表
+- `clear_fields`：要清空的列表字段名（如 `["pending"]`），绕过部分 IDE 过滤空数组的问题
 
 ---
 
-## 自检要求
+## 9. 开发规范
 
-**完成任务前必须自问**：
-1. 排查是否完整？
-2. 数据是否准确？
-3. 逻辑是否严谨？
+**代码风格**：简洁优先，三目运算符 > if-else，短路求值 > 条件判断，模板字符串 > 拼接，不写无意义注释
 
-**禁止**：
-- 禁止说"大部分"、"基本上"、"应该是"等模糊词
-- 禁止未经验证就下结论
+**Git 工作流**：日常在 `dev` 分支，禁止直接在 master 提交。只有用户明确要求时才提交。提交流程：确认 dev 分支（`git branch --show-current`）→ `git add -A` → `git commit -m "fix: 简述"` → `git push origin dev`。合并到 master 仅用户明确要求时执行。
 
+**IDE 安全**：禁止 `$(...)` + 管道、禁止 `python3 -c` 多行脚本（写 .py 文件）、`lsof -ti:端口` 必须加 ignoreWarning
 
+**自测要求**：禁止让用户手动操作，能自己执行的不要让用户做。自测通过后才能说"等待验证"。
+
+**任务执行**：按顺序执行禁止跳过，全自动，禁止用"后续迭代"跳过
+
+**完成标准**：只有完成和未完成，禁止"基本完成"等模糊表述
+
+**内容迁移**：禁止凭记忆重写，必须从原文件逐行复制
+
+**context transfer/compact 续接**：有未完成工作先完成再汇报
+
+**上下文优化**：优先 `grepSearch` 定位，再 `readFile` 读取特定行。代码修改用 `strReplace`，不要先读后写
+
+**错误处理**：反复失败时记录已尝试方法，换思路解决，仍失败则询问用户
 """
 
 
@@ -463,6 +336,7 @@ WINDSURF_HOOKS_CONFIG = {
 
 OPENCODE_PLUGIN_CONTENT = """\
 // AIVectorMemory plugin for OpenCode (@opencode-ai/plugin)
+// - experimental.chat.system.transform: 注入开发规则到 system prompt（对应 Kiro promptSubmit hook）
 // - tool.execute.before: 检查 Edit/Write 前是否有活跃 track issue
 import { execSync } from "child_process";
 import { homedir } from "os";
@@ -471,8 +345,66 @@ import { join } from "path";
 
 const DB_PATH = join(homedir(), ".aivectormemory", "memory.db");
 
+const DEV_WORKFLOW_RULES = `<ADDITIONAL_INSTRUCTIONS>
+## IDENTITY & TONE
+
+- Role: 你是首席工程师兼高级数据科学家
+- Voice: Professional, Concise, Result-Oriented. No "I hope this helps"
+- Authority: The user is the Lead Architect. Execute explicit commands immediately (not questions).
+
+---
+
+## 消息类型判断
+
+收到用户消息后，严谨认真理解用户消息的意思然后判断消息类型，询问仅限闲聊，进度、讨论规则、简单确认不记录问题文档，其他所有情况必须需要记录问题文档，然后告诉用户方案，等用户确认后再执行
+
+回复时用自然语言说明判断结果，例如：
+- "这是个询问，验证相应文件代码后回答"
+- "这是个问题，方案如下..."
+- "这个问题需要记录"
+
+---
+
+## 核心原则
+
+1. 任何操作前必须验证，不能假设，不能靠记忆。
+2. 遇到需要处理的问题时禁止盲目测试，必须查看问题对应的代码文件，必须找到问题的根本原因，必须与实际错误对应。
+3. 禁止口头承诺，口头答应，一切以测试通过为准。
+4. 任何文件修改前必须查看代码强制严谨思考。
+5. 开发、自测过程中禁止让用户手动操作，能自己执行的不要让用户做。
+
+---
+
+## IDE 卡死防范
+
+- 禁止 $(...) + 管道组合
+- 禁止 MySQL -e 执行多条语句
+- 禁止 python3 -c "..." 执行多行脚本（超过2行必须写成 .py 文件再执行）
+- 禁止 lsof -ti:端口 不加 ignoreWarning（会被安全检查拦截）
+- 正确做法：SQL 写入 .sql 文件用 < data/xxx.sql 执行；Python 验证脚本写成 .py 文件用 python3 xxx.py 执行
+
+---
+
+## 自测要求
+
+禁止让用户手动操作 - 能自己执行的，不要让用户做
+
+- Python: python -m pytest 或直接运行脚本验证
+- MCP Server: 通过 stdio 发送 JSON-RPC 消息验证
+- Web 看板: Playwright 验证
+- 自测通过后才能说"等待验证"
+
+---
+
+## 开发规则
+
+> 禁止口头承诺，一切以测试通过为准。
+> 任何文件修改前必须强制严谨思考。
+> 遇到报错或异常时严禁盲目测试，必须分析问题根本原因。
+</ADDITIONAL_INSTRUCTIONS>`;
+
 function hasActiveIssues(projectDir) {
-  if (!existsSync(DB_PATH)) return true; // 首次使用放行
+  if (!existsSync(DB_PATH)) return true;
   try {
     const result = execSync(
       `sqlite3 "${DB_PATH}" "SELECT COUNT(*) FROM issues WHERE project_dir='${projectDir}' AND status IN ('pending','in_progress');"`,
@@ -480,18 +412,21 @@ function hasActiveIssues(projectDir) {
     ).trim();
     return parseInt(result, 10) > 0;
   } catch {
-    return true; // 查询失败放行
+    return true;
   }
 }
 
 export default async ({ project }) => ({
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push(DEV_WORKFLOW_RULES);
+  },
   "tool.execute.before": async ({ tool, sessionID }, output) => {
     if (tool !== "Edit" && tool !== "Write" && tool !== "edit" && tool !== "write") return;
     const projectDir = project?.path || process.cwd();
     if (!hasActiveIssues(projectDir)) {
       output.args = {
         ...output.args,
-        __blocked: "⚠️ 当前项目没有活跃的 track issue。请先调用 track(action: create) 记录问题后再修改代码。",
+        __blocked: "当前项目没有活跃的 track issue。请先调用 track(action: create) 记录问题后再修改代码。",
       };
     }
   },
@@ -589,6 +524,30 @@ def _write_opencode_plugins(plugins_dir: Path) -> list[str]:
     """写入 OpenCode 插件文件，返回变更列表"""
     results = []
     plugins_dir.mkdir(parents=True, exist_ok=True)
+    # 确保 .opencode/package.json 包含 "type": "module"（ESM 插件必需）
+    opencode_dir = plugins_dir.parent
+    pkg_path = opencode_dir / "package.json"
+    pkg_expected = {"type": "module", "dependencies": {"@opencode-ai/plugin": "1.2.10"}}
+    pkg_changed = False
+    if pkg_path.exists():
+        try:
+            pkg = json.loads(pkg_path.read_text("utf-8"))
+            if pkg.get("type") != "module":
+                pkg["type"] = "module"
+                pkg_changed = True
+            if pkg.get("dependencies", {}).get("@opencode-ai/plugin") != "1.2.10":
+                pkg.setdefault("dependencies", {})["@opencode-ai/plugin"] = "1.2.10"
+                pkg_changed = True
+            if pkg_changed:
+                pkg_path.write_text(json.dumps(pkg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except (json.JSONDecodeError, OSError):
+            pkg_path.write_text(json.dumps(pkg_expected, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            pkg_changed = True
+    else:
+        pkg_path.write_text(json.dumps(pkg_expected, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        pkg_changed = True
+    results.append(f"{'✓ 已更新' if pkg_changed else '- 无变更'}  package.json (type: module)")
+    # 写入插件文件
     filepath = plugins_dir / "aivectormemory-pre-tool-check.js"
     if filepath.exists() and filepath.read_text("utf-8").strip() == OPENCODE_PLUGIN_CONTENT.strip():
         results.append("- 无变更  Plugin: aivectormemory-pre-tool-check.js")
@@ -699,7 +658,7 @@ def _build_config(cmd: str, args: list[str], fmt: str) -> dict:
         "command": cmd,
         "args": args,
         "disabled": False,
-        "autoApprove": ["remember", "recall", "forget", "status", "track", "auto_save"],
+        "autoApprove": ["remember", "recall", "forget", "status", "track", "task", "readme", "auto_save"],
     }
     if env_block:
         cfg["env"] = env_block
