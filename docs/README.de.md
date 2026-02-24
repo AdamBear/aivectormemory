@@ -46,7 +46,7 @@
 │                                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
 │  │ remember │ │  recall   │ │   auto_save      │ │
-│  │ forget   │ │  digest   │ │   status/track   │ │
+│  │ forget   │ │  task     │ │   status/track   │ │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │
 │       │            │               │             │
 │  ┌────▼────────────▼───────────────▼──────────┐  │
@@ -127,7 +127,7 @@ uvx aivectormemory install
 
 </details>
 
-## 🛠️ 7 MCP-Werkzeuge
+## 🛠️ 8 MCP-Werkzeuge
 
 ### `remember` — Erinnerung speichern
 
@@ -177,24 +177,36 @@ status   (string)   "pending" / "in_progress" / "completed"
 content  (string)   Untersuchungsinhalt
 ```
 
-### `digest` — Erinnerungszusammenfassung
+### `task` — Aufgabenverwaltung
 
 ```
-scope          (string)    Bereich
-since_sessions (integer)   Letzte N Sitzungen
-tags           (string[])  Tag-Filter
+action     (string, erforderlich)  "batch_create" / "update" / "list" / "delete" / "archive"
+feature_id (string)                Verknüpfte Funktionskennung (erforderlich für list)
+tasks      (array)                 Aufgabenliste (batch_create, Unteraufgaben unterstützt)
+task_id    (integer)               Aufgaben-ID (update)
+status     (string)                "pending" / "in_progress" / "completed" / "skipped"
 ```
 
-### `auto_save` — Automatisches Speichern
+Über feature_id mit Spec-Dokumenten verknüpft. Update synchronisiert automatisch tasks.md Checkboxen und verknüpften Issue-Status.
+
+### `readme` — README-Generierung
 
 ```
-decisions[]      Wichtige Entscheidungen
-modifications[]  Dateiänderungs-Zusammenfassungen
-pitfalls[]       Fehlerprotokolle
-todos[]          Offene Aufgaben
+action   (string)    "generate" (Standard) / "diff" (Unterschiede vergleichen)
+lang     (string)    Sprache: en / zh-TW / ja / de / fr / es
+sections (string[])  Abschnitte angeben: header / tools / deps
 ```
 
-Kategorisiert, taggt und dedupliziert automatisch am Ende jeder Konversation.
+Generiert automatisch README-Inhalte aus TOOL_DEFINITIONS / pyproject.toml, Mehrsprachigkeit unterstützt.
+
+### `auto_save` — Automatisches Speichern von Präferenzen
+
+```
+preferences  (string[])  Vom Benutzer geäußerte technische Präferenzen (festes scope=user, projektübergreifend)
+extra_tags   (string[])  Zusätzliche Tags
+```
+
+Extrahiert und speichert automatisch Benutzerpräferenzen am Ende jeder Konversation, intelligente Deduplizierung.
 
 ## 📊 Web-Dashboard
 
@@ -247,37 +259,35 @@ AIVectorMemory ist die Speicherschicht. Verwende Steering-Regeln, um der KI mitz
 <summary>📋 Steering-Regeln Beispiel (automatisch generiert)</summary>
 
 ```markdown
-# AIVectorMemory - Sitzungsübergreifender persistenter Speicher
+# AIVectorMemory - Workflow-Regeln
 
-## Startprüfung
+## 1. Neuer Sitzungsstart (in Reihenfolge ausführen)
 
-Zu Beginn jeder neuen Sitzung in dieser Reihenfolge ausführen:
+1. `recall` (tags: ["Projektwissen"], scope: "project", top_k: 100) Projektwissen laden
+2. `recall` (tags: ["preference"], scope: "user", top_k: 20) Benutzereinstellungen laden
+3. `status` (ohne state-Parameter) Sitzungsstatus lesen
+4. Blockiert → berichten und warten; Nicht blockiert → Verarbeitungsfluss starten
 
-1. `status` aufrufen (ohne Parameter) um Sitzungsstatus zu lesen, `is_blocked` und `block_reason` prüfen
-2. `recall` aufrufen (tags: ["Projektwissen"], scope: "project") um Projektwissen zu laden
-3. `recall` aufrufen (tags: ["preference"], scope: "user") um Benutzereinstellungen zu laden
+## 2. Nachrichtenverarbeitungsfluss
 
-## Wann aufrufen
+- Schritt A: `status` Status lesen, bei Blockierung warten
+- Schritt B: Nachrichtentyp klassifizieren (Chat/Korrektur/Präferenz/Code-Problem)
+- Schritt C: `track create` Problem erfassen
+- Schritt D: Untersuchen (`recall` Fehler suchen + Code prüfen + Ursache finden)
+- Schritt E: Plan dem Benutzer vorstellen, Blockierung setzen für Bestätigung
+- Schritt F: Code ändern (vor Änderungen `recall` Fehler prüfen)
+- Schritt G: Tests zur Verifizierung ausführen
+- Schritt H: Blockierung setzen für Benutzerverifizierung
+- Schritt I: Benutzer bestätigt → `track archive` + Blockierung aufheben
 
-- Neue Sitzung beginnt: `status` aufrufen um vorherigen Arbeitsstatus zu lesen
-- Fehler gefunden: `remember` aufrufen um zu protokollieren, Tag "Fehler" hinzufügen
-- Historische Erfahrung benötigt: `recall` für semantische Suche aufrufen
-- Bug oder TODO gefunden: `track` (action: create) aufrufen
-- Aufgabenfortschritt ändert sich: `status` (state Parameter übergeben) zum Aktualisieren
-- Vor Konversationsende: `auto_save` aufrufen um diese Sitzung zu speichern
+## 3. Blockierungsregeln
 
-## Sitzungsstatus-Verwaltung
+Bei Planvorschlägen oder Verifizierungswartung muss `status({ is_blocked: true })` gesetzt werden.
+Nur nach expliziter Benutzerbestätigung aufheben. Niemals selbst aufheben.
 
-status-Felder: is_blocked, block_reason, current_task, next_step,
-progress[], recent_changes[], pending[]
+## 4-9. Problemverfolgung / Code-Prüfung / Spec-Aufgabenverwaltung / Erinnerungsqualität / Werkzeugübersicht / Entwicklungsstandards
 
-⚠️ **Blockierungsschutz**: Wenn Sie einen Plan zur Bestätigung vorschlagen oder eine Korrektur zur Überprüfung abschließen, rufen Sie immer gleichzeitig `status` auf, um `is_blocked: true` zu setzen. Dies verhindert, dass eine neue Sitzung nach dem Kontexttransfer fälschlicherweise „bestätigt" annimmt und eigenständig ausführt.
-
-## Problemverfolgung
-
-1. `track create` → Problem erfassen
-2. `track update` → Untersuchungsinhalt aktualisieren
-3. `track archive` → Gelöste Probleme archivieren
+(Vollständige Regeln werden automatisch von `run install` generiert)
 ```
 
 </details>
@@ -330,6 +340,23 @@ Oder env in der MCP-Konfiguration hinzufügen:
 | Web | Nativer HTTPServer + Vanilla JS |
 
 ## 📋 Änderungsprotokoll
+
+### v0.2.6
+
+**Steering-Regeln Umstrukturierung**
+- 📝 Steering-Regeldokument von alter 3-Abschnitt-Struktur auf 9-Abschnitt-Struktur umgeschrieben (Sitzungsstart / Nachrichtenverarbeitung / Blockierungsregeln / Problemverfolgung / Code-Überprüfung / Spec-Aufgabenverwaltung / Speicherqualität / Werkzeugreferenz / Entwicklungsstandards)
+- 📝 `install.py` STEERING_CONTENT-Vorlage synchronisiert, neue Projekte erhalten aktualisierte Regeln bei Installation
+- 📝 Tags von festen Listen auf dynamische Extraktion umgestellt (Schlüsselwörter aus Inhalt extrahiert), verbesserte Speicherabrufgenauigkeit
+
+**Fehlerbehebungen**
+- 🐛 `readme`-Tool `handle_readme()` fehlte `**_`, verursachte MCP-Aufruffehler `unexpected keyword argument 'engine'`
+- 🐛 Web-Dashboard Speichersuche-Paginierung behoben (vollständige Filterung vor Paginierung bei Suchanfrage, behebt unvollständige Suchergebnisse)
+
+**Dokumentationsaktualisierungen**
+- 📖 README Werkzeuganzahl 7→8, Architekturdiagramm `digest`→`task`, `task`/`readme` Werkzeugbeschreibungen hinzugefügt
+- 📖 `auto_save`-Parameter von `decisions[]/modifications[]/pitfalls[]/todos[]` auf `preferences[]/extra_tags[]` aktualisiert
+- 📖 Steering-Regelbeispiel von 3-Abschnitt-Format auf 9-Abschnitt-Strukturzusammenfassung aktualisiert
+- 📖 Aktualisierungen über 6 Sprachversionen synchronisiert
 
 ### v0.2.5
 

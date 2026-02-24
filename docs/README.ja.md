@@ -46,7 +46,7 @@
 │                                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
 │  │ remember │ │  recall   │ │   auto_save      │ │
-│  │ forget   │ │  digest   │ │   status/track   │ │
+│  │ forget   │ │  task     │ │   status/track   │ │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │
 │       │            │               │             │
 │  ┌────▼────────────▼───────────────▼──────────┐  │
@@ -127,7 +127,7 @@ uvx aivectormemory install
 
 </details>
 
-## 🛠️ 7つのMCPツール
+## 🛠️ 8つのMCPツール
 
 ### `remember` — 記憶を保存
 
@@ -177,24 +177,36 @@ status   (string)   "pending" / "in_progress" / "completed"
 content  (string)   調査内容
 ```
 
-### `digest` — 記憶サマリー
+### `task` — タスク管理
 
 ```
-scope          (string)    スコープ
-since_sessions (integer)   直近N回のセッション
-tags           (string[])  タグフィルター
+action     (string, 必須)  "batch_create" / "update" / "list" / "delete" / "archive"
+feature_id (string)        関連機能識別子（list 時必須）
+tasks      (array)         タスクリスト（batch_create、サブタスク対応）
+task_id    (integer)       タスクID（update）
+status     (string)        "pending" / "in_progress" / "completed" / "skipped"
 ```
 
-### `auto_save` — 自動保存
+feature_id で spec ドキュメントと連携。update で tasks.md チェックボックスと関連イシューステータスを自動同期。
+
+### `readme` — README生成
 
 ```
-decisions[]      重要な意思決定
-modifications[]  ファイル変更サマリー
-pitfalls[]       つまずき記録
-todos[]          未処理項目
+action   (string)    "generate"（デフォルト）/ "diff"（差分比較）
+lang     (string)    言語：en / zh-TW / ja / de / fr / es
+sections (string[])  指定セクション：header / tools / deps
 ```
 
-各会話の終了時に自動的に分類・タグ付け・重複排除して保存。
+TOOL_DEFINITIONS / pyproject.toml から README コンテンツを自動生成、多言語対応。
+
+### `auto_save` — プリファレンス自動保存
+
+```
+preferences  (string[])  ユーザーが表明した技術的プリファレンス（固定 scope=user、プロジェクト横断）
+extra_tags   (string[])  追加タグ
+```
+
+各会話の終了時にユーザープリファレンスを自動抽出・保存、スマート重複排除。
 
 ## 📊 Webダッシュボード
 
@@ -247,37 +259,35 @@ AIVectorMemoryはストレージ層です。Steeringルールを使ってAIに**
 <summary>📋 Steeringルール例（自動生成）</summary>
 
 ```markdown
-# AIVectorMemory - セッション間永続メモリ
+# AIVectorMemory - ワークフロールール
 
-## 起動チェック
+## 1. 新セッション起動（順番に実行必須）
 
-新しいセッション開始時に、以下の順序で実行：
+1. `recall`（tags: ["プロジェクト知識"], scope: "project", top_k: 100）プロジェクト知識を読み込み
+2. `recall`（tags: ["preference"], scope: "user", top_k: 20）ユーザー設定を読み込み
+3. `status`（stateなし）セッション状態を読み取り
+4. ブロック中 → 報告して待機；ブロックなし → 処理フローへ
 
-1. `status`（パラメータなし）を呼び出してセッション状態を読み取り、`is_blocked` と `block_reason` を確認
-2. `recall`（tags: ["プロジェクト知識"], scope: "project"）を呼び出してプロジェクト知識を読み込み
-3. `recall`（tags: ["preference"], scope: "user"）を呼び出してユーザー設定を読み込み
+## 2. メッセージ処理フロー
 
-## いつ呼び出すか
+- ステップA：`status` で状態読み取り、ブロック中なら待機
+- ステップB：メッセージ種別判定（雑談/修正/設定/コード問題）
+- ステップC：`track create` で問題記録
+- ステップD：調査（`recall` でつまずき検索 + コード確認 + 根本原因特定）
+- ステップE：ユーザーに方針説明、ブロック設定して確認待ち
+- ステップF：コード修正（修正前に `recall` でつまずき確認）
+- ステップG：テスト実行で検証
+- ステップH：ブロック設定してユーザー検証待ち
+- ステップI：ユーザー確認 → `track archive` + ブロック解除
 
-- 新セッション開始時：`status` を呼び出して前回の作業状態を読み取り
-- つまずき発見時：`remember` を呼び出して記録、タグ "つまずき" を追加
-- 過去の経験が必要な時：`recall` でセマンティック検索
-- バグやTODO発見時：`track`（action: create）を呼び出し
-- タスク進捗変更時：`status`（stateパラメータ渡し）で更新
-- 会話終了前：`auto_save` を呼び出してこのセッションを保存
+## 3. ブロッキングルール
 
-## セッション状態管理
+方針提案時・修正完了検証待ち時は必ず `status({ is_blocked: true })`。
+ユーザーの明確な確認後のみブロック解除可能。自己解除禁止。
 
-statusフィールド：is_blocked, block_reason, current_task, next_step,
-progress[], recent_changes[], pending[]
+## 4-9. 問題追跡 / コードチェック / Specタスク管理 / 記憶品質 / ツール一覧 / 開発規範
 
-⚠️ **ブロッキング保護**：プラン提案で確認待ち、または修正完了で検証待ちの場合、必ず同時に `status` を呼び出して `is_blocked: true` を設定してください。これにより、コンテキスト転送後に新しいセッションが誤って「確認済み」と判断して自律的に実行することを防ぎます。
-
-## 問題追跡
-
-1. `track create` → 問題を記録
-2. `track update` → 調査内容を更新
-3. `track archive` → 解決済み問題をアーカイブ
+（完全なルールは `run install` で自動生成）
 ```
 
 </details>
@@ -330,6 +340,23 @@ export HF_ENDPOINT=https://hf-mirror.com
 | Web | ネイティブHTTPServer + Vanilla JS |
 
 ## 📋 更新履歴
+
+### v0.2.6
+
+**Steeringルール再構築**
+- 📝 Steeringルールドキュメントを旧3セクション構造から9セクション構造に書き換え（セッション開始/メッセージ処理/ブロッキングルール/問題追跡/コードレビュー/Specタスク管理/メモリ品質/ツールリファレンス/開発規範）
+- 📝 `install.py` STEERING_CONTENTテンプレート同期更新、新プロジェクトはインストール時に更新されたルールを取得
+- 📝 タグを固定リストから動的抽出に変更（コンテンツからキーワードを抽出）、メモリ検索精度を向上
+
+**バグ修正**
+- 🐛 `readme`ツール `handle_readme()` に `**_` が不足、MCP呼び出しエラー `unexpected keyword argument 'engine'` を修正
+- 🐛 Webダッシュボードメモリ検索ページネーション修正（検索クエリ時にページネーション前に全量フィルタリング、不完全な検索結果を修正）
+
+**ドキュメント更新**
+- 📖 READMEツール数 7→8、アーキテクチャ図 `digest`→`task`、`task`/`readme`ツール説明追加
+- 📖 `auto_save`パラメータを旧 `decisions[]/modifications[]/pitfalls[]/todos[]` から `preferences[]/extra_tags[]` に更新
+- 📖 Steeringルール例を3セクション形式から9セクション構造サマリーに更新
+- 📖 6言語バージョンに同期更新
 
 ### v0.2.5
 

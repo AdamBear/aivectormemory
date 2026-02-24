@@ -144,7 +144,7 @@ def _diff_content(lang: str) -> dict:
     }
 
 
-def handle_readme(args: dict, cm) -> dict:
+def handle_readme(args: dict, cm, **_) -> dict:
     action = args.get("action", "generate")
     lang = args.get("lang", "en")
     if action == "generate":

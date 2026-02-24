@@ -46,7 +46,7 @@
 │                                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
 │  │ remember │ │  recall   │ │   auto_save      │ │
-│  │ forget   │ │  digest   │ │   status/track   │ │
+│  │ forget   │ │  task     │ │   status/track   │ │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │
 │       │            │               │             │
 │  ┌────▼────────────▼───────────────▼──────────┐  │
@@ -128,7 +128,7 @@ uvx aivectormemory install
 
 </details>
 
-## 🛠️ 7 个 MCP 工具
+## 🛠️ 8 个 MCP 工具
 
 ### `remember` — 存入记忆
 
@@ -178,24 +178,36 @@ status   (string)   "pending" / "in_progress" / "completed"
 content  (string)   排查内容
 ```
 
-### `digest` — 记忆摘要
+### `task` — 任务管理
 
 ```
-scope          (string)    范围
-since_sessions (integer)   最近 N 次会话
-tags           (string[])  标签过滤
+action     (string, 必填)  "batch_create" / "update" / "list" / "delete" / "archive"
+feature_id (string)        关联功能标识（list 时必填）
+tasks      (array)         任务列表（batch_create，支持子任务）
+task_id    (integer)       任务 ID（update）
+status     (string)        "pending" / "in_progress" / "completed" / "skipped"
 ```
 
-### `auto_save` — 自动保存
+通过 feature_id 关联 spec 文档，update 自动同步 tasks.md checkbox 并联动问题状态。
+
+### `readme` — README 生成
 
 ```
-decisions[]      关键决策
-modifications[]  文件修改摘要
-pitfalls[]       踩坑记录
-todos[]          待办事项
+action   (string)    "generate"（默认）/ "diff"（差异对比）
+lang     (string)    语言：en / zh-TW / ja / de / fr / es
+sections (string[])  指定章节：header / tools / deps
 ```
 
-每次对话结束自动分类存储，打标签，去重。
+从 TOOL_DEFINITIONS / pyproject.toml 自动生成 README 内容，支持多语言。
+
+### `auto_save` — 自动保存偏好
+
+```
+preferences  (string[])  用户表达的技术偏好（固定 scope=user，跨项目通用）
+extra_tags   (string[])  额外标签
+```
+
+每次对话结束自动提取并存储用户偏好，智能去重。
 
 ## 📊 Web 看板
 
@@ -248,37 +260,35 @@ AIVectorMemory 是存储层，通过 Steering 规则告诉 AI **何时、如何*
 <summary>📋 Steering 规则范例（自动生成）</summary>
 
 ```markdown
-# AIVectorMemory - 跨会话持久记忆
+# AIVectorMemory - 工作规则
 
-## 启动检查
+## 1. 新会话启动（必须按顺序执行）
 
-每次新会话开始时，按以下顺序执行：
+1. `recall`（tags: ["项目知识"], scope: "project", top_k: 100）加载项目知识
+2. `recall`（tags: ["preference"], scope: "user", top_k: 20）加载用户偏好
+3. `status`（不传 state）读取会话状态
+4. 有阻塞 → 汇报并等待；无阻塞 → 进入处理流程
 
-1. 调用 `status`（不传参数）读取会话状态，检查 `is_blocked` 和 `block_reason`
-2. 调用 `recall`（tags: ["项目知识"], scope: "project"）加载项目知识
-3. 调用 `recall`（tags: ["preference"], scope: "user"）加载用户偏好
+## 2. 收到消息后的处理流程
 
-## 何时调用
+- 步骤 A：`status` 读取状态，有阻塞则等待
+- 步骤 B：判断消息类型（闲聊/纠正/偏好/代码问题）
+- 步骤 C：`track create` 记录问题
+- 步骤 D：排查（`recall` 查踩坑 + 查看代码 + 找根因）
+- 步骤 E：向用户说明方案，设阻塞等确认
+- 步骤 F：修改代码（修改前 `recall` 查踩坑）
+- 步骤 G：运行测试验证
+- 步骤 H：设阻塞等待用户验证
+- 步骤 I：用户确认 → `track archive` + 清阻塞
 
-- 新会话开始时：调用 `status` 读取上次的工作状态
-- 遇到踩坑/技术要点时：调用 `remember` 记录，标签加 "踩坑"
-- 需要查找历史经验时：调用 `recall` 语义搜索
-- 发现 bug 或待处理事项时：调用 `track`（action: create）
-- 任务进度变化时：调用 `status`（传 state 参数）更新
-- 对话结束前：调用 `auto_save` 保存本次对话
+## 3. 阻塞规则
 
-## 会话状态管理
+提方案等确认、修复完等验证时必须 `status({ is_blocked: true })`。
+用户明确确认后才能清除阻塞，禁止自行清除。
 
-status 字段：is_blocked, block_reason, current_task, next_step,
-progress[], recent_changes[], pending[]
+## 4-9. 问题追踪 / 代码检查 / Spec 任务管理 / 记忆质量 / 工具速查 / 开发规范
 
-⚠️ **阻塞防护**：提出方案等待确认、修复完成等待验证时，必须同步调用 `status` 设置 `is_blocked: true`。这可以防止会话转移时新会话误判为"已确认"而擅自执行。
-
-## 问题追踪
-
-1. `track create` → 记录问题
-2. `track update` → 更新排查内容
-3. `track archive` → 归档已解决问题
+（完整规则由 `run install` 自动生成）
 ```
 
 </details>
@@ -331,6 +341,23 @@ export HF_ENDPOINT=https://hf-mirror.com
 | Web | 原生 HTTPServer + Vanilla JS |
 
 ## 📋 更新日志
+
+### v0.2.6
+
+**Steering 规则重构**
+- 📝 Steering 规则文档从旧的 3 节结构重写为 9 节结构（新会话启动/处理流程/阻塞规则/问题追踪/代码检查/Spec任务管理/记忆质量/工具速查/开发规范）
+- 📝 `install.py` STEERING_CONTENT 模板同步更新，新项目安装即用新规则
+- 📝 tags 从固定列表改为动态提取（从内容提取关键词标签），提升记忆检索精度
+
+**Bug 修复**
+- 🐛 `readme` 工具 `handle_readme()` 缺少 `**_` 导致 MCP 调用报错 `unexpected keyword argument 'engine'`
+- 🐛 Web 看板记忆搜索分页修复（有搜索词时先全量过滤再分页，解决搜索结果不完整问题）
+
+**文档更新**
+- 📖 README 工具数量 7→8、架构图 `digest`→`task`、工具描述新增 `task`/`readme`
+- 📖 `auto_save` 参数从旧的 `decisions[]/modifications[]/pitfalls[]/todos[]` 更新为 `preferences[]/extra_tags[]`
+- 📖 Steering 规则范例从 3 节格式更新为 9 节结构摘要
+- 📖 同步更新 6 个语言版本（繁體中文/English/Español/Deutsch/Français/日本語）
 
 ### v0.2.5
 

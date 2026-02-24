@@ -46,7 +46,7 @@
 │                                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
 │  │ remember │ │  recall   │ │   auto_save      │ │
-│  │ forget   │ │  digest   │ │   status/track   │ │
+│  │ forget   │ │  task     │ │   status/track   │ │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │
 │       │            │               │             │
 │  ┌────▼────────────▼───────────────▼──────────┐  │
@@ -127,7 +127,7 @@ uvx aivectormemory install
 
 </details>
 
-## 🛠️ 7 MCP Tools
+## 🛠️ 8 MCP Tools
 
 ### `remember` — Store a memory
 
@@ -177,24 +177,36 @@ status   (string)   "pending" / "in_progress" / "completed"
 content  (string)   Investigation content
 ```
 
-### `digest` — Memory summary
+### `task` — Task management
 
 ```
-scope          (string)    Scope
-since_sessions (integer)   Last N sessions
-tags           (string[])  Tag filter
+action     (string, required)  "batch_create" / "update" / "list" / "delete" / "archive"
+feature_id (string)            Linked feature identifier (required for list)
+tasks      (array)             Task list (batch_create, supports subtasks)
+task_id    (integer)           Task ID (update)
+status     (string)            "pending" / "in_progress" / "completed" / "skipped"
 ```
 
-### `auto_save` — Auto save
+Links to spec docs via feature_id. Update auto-syncs tasks.md checkboxes and linked issue status.
+
+### `readme` — README generation
 
 ```
-decisions[]      Key decisions
-modifications[]  File modification summaries
-pitfalls[]       Pitfall records
-todos[]          Todo items
+action   (string)    "generate" (default) / "diff" (compare differences)
+lang     (string)    Language: en / zh-TW / ja / de / fr / es
+sections (string[])  Specify sections: header / tools / deps
 ```
 
-Auto-categorizes, tags, and deduplicates at the end of each conversation.
+Auto-generates README content from TOOL_DEFINITIONS / pyproject.toml, multi-language support.
+
+### `auto_save` — Auto save preferences
+
+```
+preferences  (string[])  User-expressed technical preferences (fixed scope=user, cross-project)
+extra_tags   (string[])  Additional tags
+```
+
+Auto-extracts and stores user preferences at end of each conversation, smart dedup.
 
 ## 📊 Web Dashboard
 
@@ -247,37 +259,35 @@ Running `run install` auto-generates Steering rules and Hooks config — no manu
 <summary>📋 Steering Rules Example (auto-generated)</summary>
 
 ```markdown
-# AIVectorMemory - Cross-Session Persistent Memory
+# AIVectorMemory - Workflow Rules
 
-## Startup Check
+## 1. New Session Startup (execute in order)
 
-At the start of each new session, execute in order:
+1. `recall` (tags: ["project-knowledge"], scope: "project", top_k: 100) load project knowledge
+2. `recall` (tags: ["preference"], scope: "user", top_k: 20) load user preferences
+3. `status` (no state param) read session state
+4. Blocked → report and wait; Not blocked → enter processing flow
 
-1. Call `status` (no params) to read session state, check `is_blocked` and `block_reason`
-2. Call `recall` (tags: ["project-knowledge"], scope: "project") to load project knowledge
-3. Call `recall` (tags: ["preference"], scope: "user") to load user preferences
+## 2. Message Processing Flow
 
-## When to Call
+- Step A: `status` read state, wait if blocked
+- Step B: Classify message type (chat/correction/preference/code issue)
+- Step C: `track create` record issue
+- Step D: Investigate (`recall` pitfalls + read code + find root cause)
+- Step E: Present plan to user, set blocked awaiting confirmation
+- Step F: Modify code (`recall` pitfalls before changes)
+- Step G: Run tests to verify
+- Step H: Set blocked awaiting user verification
+- Step I: User confirms → `track archive` + clear block
 
-- New session starts: call `status` to read previous work state
-- Hit a pitfall: call `remember` to record, add tag "pitfall"
-- Need historical experience: call `recall` for semantic search
-- Found a bug or TODO: call `track` (action: create)
-- Task progress changes: call `status` (pass state param) to update
-- Before conversation ends: call `auto_save` to save this session
+## 3. Blocking Rules
 
-## Session State Management
+Must `status({ is_blocked: true })` when proposing plans or awaiting verification.
+Only clear after explicit user confirmation. Never self-clear.
 
-status fields: is_blocked, block_reason, current_task, next_step,
-progress[], recent_changes[], pending[]
+## 4-9. Issue Tracking / Code Checks / Spec Task Mgmt / Memory Quality / Tool Reference / Dev Standards
 
-⚠️ **Blocking safeguard**: When proposing a plan awaiting confirmation or completing a fix awaiting verification, always call `status` to set `is_blocked: true` simultaneously. This prevents a new session from mistakenly assuming "confirmed" and executing autonomously after context transfer.
-
-## Issue Tracking
-
-1. `track create` → Record issue
-2. `track update` → Update investigation content
-3. `track archive` → Archive resolved issues
+(Full rules auto-generated by `run install`)
 ```
 
 </details>
@@ -330,6 +340,23 @@ Or add env to MCP config:
 | Web | Native HTTPServer + Vanilla JS |
 
 ## 📋 Changelog
+
+### v0.2.6
+
+**Steering Rules Refactoring**
+- 📝 Steering rules document rewritten from old 3-section structure to 9-section structure (Session Startup / Message Processing / Blocking Rules / Issue Tracking / Code Review / Spec Task Management / Memory Quality / Tool Reference / Development Standards)
+- 📝 `install.py` STEERING_CONTENT template synced, new projects get updated rules on install
+- 📝 Tags changed from fixed lists to dynamic extraction (keywords extracted from content), improving memory retrieval accuracy
+
+**Bug Fixes**
+- 🐛 `readme` tool `handle_readme()` missing `**_` caused MCP call error `unexpected keyword argument 'engine'`
+- 🐛 Web dashboard memory search pagination fix (full filter before pagination when search query present, fixing incomplete search results)
+
+**Documentation Updates**
+- 📖 README tool count 7→8, architecture diagram `digest`→`task`, added `task`/`readme` tool descriptions
+- 📖 `auto_save` parameters updated from old `decisions[]/modifications[]/pitfalls[]/todos[]` to `preferences[]/extra_tags[]`
+- 📖 Steering rules example updated from 3-section to 9-section structure summary
+- 📖 Synced updates across 6 language versions (繁體中文/简体中文/Español/Deutsch/Français/日本語)
 
 ### v0.2.5
 

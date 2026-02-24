@@ -46,7 +46,7 @@
 │                                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
 │  │ remember │ │  recall   │ │   auto_save      │ │
-│  │ forget   │ │  digest   │ │   status/track   │ │
+│  │ forget   │ │  task     │ │   status/track   │ │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │
 │       │            │               │             │
 │  ┌────▼────────────▼───────────────▼──────────┐  │
@@ -127,7 +127,7 @@ uvx aivectormemory install
 
 </details>
 
-## 🛠️ 7 個 MCP 工具
+## 🛠️ 8 個 MCP 工具
 
 ### `remember` — 存入記憶
 
@@ -177,24 +177,36 @@ status   (string)   "pending" / "in_progress" / "completed"
 content  (string)   排查內容
 ```
 
-### `digest` — 記憶摘要
+### `task` — 任務管理
 
 ```
-scope          (string)    範圍
-since_sessions (integer)   最近 N 次會話
-tags           (string[])  標籤過濾
+action     (string, 必填)  "batch_create" / "update" / "list" / "delete" / "archive"
+feature_id (string)        關聯功能標識（list 時必填）
+tasks      (array)         任務列表（batch_create，支援子任務）
+task_id    (integer)       任務 ID（update）
+status     (string)        "pending" / "in_progress" / "completed" / "skipped"
 ```
 
-### `auto_save` — 自動儲存
+透過 feature_id 關聯 spec 文件，update 自動同步 tasks.md checkbox 並聯動問題狀態。
+
+### `readme` — README 生成
 
 ```
-decisions[]      關鍵決策
-modifications[]  檔案修改摘要
-pitfalls[]       踩坑記錄
-todos[]          待辦事項
+action   (string)    "generate"（預設）/ "diff"（差異對比）
+lang     (string)    語言：en / zh-TW / ja / de / fr / es
+sections (string[])  指定章節：header / tools / deps
 ```
 
-每次對話結束自動分類儲存，打標籤，去重。
+從 TOOL_DEFINITIONS / pyproject.toml 自動生成 README 內容，支援多語言。
+
+### `auto_save` — 自動儲存偏好
+
+```
+preferences  (string[])  使用者表達的技術偏好（固定 scope=user，跨專案通用）
+extra_tags   (string[])  額外標籤
+```
+
+每次對話結束自動提取並儲存使用者偏好，智慧去重。
 
 ## 📊 Web 看板
 
@@ -247,37 +259,35 @@ AIVectorMemory 是儲存層，透過 Steering 規則告訴 AI **何時、如何*
 <summary>📋 Steering 規則範例（自動產生）</summary>
 
 ```markdown
-# AIVectorMemory - 跨會話持久記憶
+# AIVectorMemory - 工作規則
 
-## 啟動檢查
+## 1. 新會話啟動（必須按順序執行）
 
-每次新會話開始時，按以下順序執行：
+1. `recall`（tags: ["項目知識"], scope: "project", top_k: 100）載入項目知識
+2. `recall`（tags: ["preference"], scope: "user", top_k: 20）載入使用者偏好
+3. `status`（不傳 state）讀取會話狀態
+4. 有阻塞 → 匯報並等待；無阻塞 → 進入處理流程
 
-1. 呼叫 `status`（不傳參數）讀取會話狀態，檢查 `is_blocked` 和 `block_reason`
-2. 呼叫 `recall`（tags: ["項目知識"], scope: "project"）載入項目知識
-3. 呼叫 `recall`（tags: ["preference"], scope: "user"）載入使用者偏好
+## 2. 收到訊息後的處理流程
 
-## 何時呼叫
+- 步驟 A：`status` 讀取狀態，有阻塞則等待
+- 步驟 B：判斷訊息類型（閒聊/糾正/偏好/程式碼問題）
+- 步驟 C：`track create` 記錄問題
+- 步驟 D：排查（`recall` 查踩坑 + 查看程式碼 + 找根因）
+- 步驟 E：向使用者說明方案，設阻塞等確認
+- 步驟 F：修改程式碼（修改前 `recall` 查踩坑）
+- 步驟 G：執行測試驗證
+- 步驟 H：設阻塞等待使用者驗證
+- 步驟 I：使用者確認 → `track archive` + 清阻塞
 
-- 新會話開始時：呼叫 `status` 讀取上次的工作狀態
-- 遇到踩坑/技術要點時：呼叫 `remember` 記錄，標籤加 "踩坑"
-- 需要查找歷史經驗時：呼叫 `recall` 語義搜尋
-- 發現 bug 或待處理事項時：呼叫 `track`（action: create）
-- 任務進度變化時：呼叫 `status`（傳 state 參數）更新
-- 對話結束前：呼叫 `auto_save` 儲存本次對話
+## 3. 阻塞規則
 
-## 會話狀態管理
+提方案等確認、修復完等驗證時必須 `status({ is_blocked: true })`。
+使用者明確確認後才能清除阻塞，禁止自行清除。
 
-status 欄位：is_blocked, block_reason, current_task, next_step,
-progress[], recent_changes[], pending[]
+## 4-9. 問題追蹤 / 程式碼檢查 / Spec 任務管理 / 記憶品質 / 工具速查 / 開發規範
 
-⚠️ **阻塞防護**：提出方案等待確認、修復完成等待驗證時，必須同步呼叫 `status` 設定 `is_blocked: true`。這可以防止會話轉移時新會話誤判為「已確認」而擅自執行。
-
-## 問題追蹤
-
-1. `track create` → 記錄問題
-2. `track update` → 更新排查內容
-3. `track archive` → 歸檔已解決問題
+（完整規則由 `run install` 自動產生）
 ```
 
 </details>
@@ -330,6 +340,23 @@ export HF_ENDPOINT=https://hf-mirror.com
 | Web | 原生 HTTPServer + Vanilla JS |
 
 ## 📋 更新日誌
+
+### v0.2.6
+
+**Steering 規則重構**
+- 📝 Steering 規則文檔從舊的 3 節結構重寫為 9 節結構（新會話啟動/處理流程/阻塞規則/問題追蹤/代碼檢查/Spec任務管理/記憶品質/工具速查/開發規範）
+- 📝 `install.py` STEERING_CONTENT 模板同步更新，新專案安裝即用新規則
+- 📝 tags 從固定列表改為動態提取（從內容提取關鍵詞標籤），提升記憶檢索精度
+
+**Bug 修復**
+- 🐛 `readme` 工具 `handle_readme()` 缺少 `**_` 導致 MCP 調用報錯 `unexpected keyword argument 'engine'`
+- 🐛 Web 看板記憶搜尋分頁修復（有搜尋詞時先全量過濾再分頁，解決搜尋結果不完整問題）
+
+**文檔更新**
+- 📖 README 工具數量 7→8、架構圖 `digest`→`task`、工具描述新增 `task`/`readme`
+- 📖 `auto_save` 參數從舊的 `decisions[]/modifications[]/pitfalls[]/todos[]` 更新為 `preferences[]/extra_tags[]`
+- 📖 Steering 規則範例從 3 節格式更新為 9 節結構摘要
+- 📖 同步更新 6 個語言版本（簡體中文/English/Español/Deutsch/Français/日本語）
 
 ### v0.2.5
 

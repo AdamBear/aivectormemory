@@ -46,7 +46,7 @@
 │                                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │
 │  │ remember │ │  recall   │ │   auto_save      │ │
-│  │ forget   │ │  digest   │ │   status/track   │ │
+│  │ forget   │ │  task     │ │   status/track   │ │
 │  └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │
 │       │            │               │             │
 │  ┌────▼────────────▼───────────────▼──────────┐  │
@@ -127,7 +127,7 @@ uvx aivectormemory install
 
 </details>
 
-## 🛠️ 7 Herramientas MCP
+## 🛠️ 8 Herramientas MCP
 
 ### `remember` — Almacenar memoria
 
@@ -177,24 +177,36 @@ status   (string)   "pending" / "in_progress" / "completed"
 content  (string)   Contenido de investigación
 ```
 
-### `digest` — Resumen de memorias
+### `task` — Gestión de tareas
 
 ```
-scope          (string)    Alcance
-since_sessions (integer)   Últimas N sesiones
-tags           (string[])  Filtro por etiquetas
+action     (string, requerido)  "batch_create" / "update" / "list" / "delete" / "archive"
+feature_id (string)             Identificador de funcionalidad asociada (requerido para list)
+tasks      (array)              Lista de tareas (batch_create, soporta subtareas)
+task_id    (integer)            ID de tarea (update)
+status     (string)             "pending" / "in_progress" / "completed" / "skipped"
 ```
 
-### `auto_save` — Guardado automático
+Vinculado a documentos spec mediante feature_id. Update sincroniza automáticamente checkboxes de tasks.md y estado de problemas asociados.
+
+### `readme` — Generación de README
 
 ```
-decisions[]      Decisiones clave
-modifications[]  Resúmenes de modificaciones de archivos
-pitfalls[]       Registros de errores encontrados
-todos[]          Elementos pendientes
+action   (string)    "generate" (por defecto) / "diff" (comparar diferencias)
+lang     (string)    Idioma: en / zh-TW / ja / de / fr / es
+sections (string[])  Secciones específicas: header / tools / deps
 ```
 
-Categoriza, etiqueta y deduplica automáticamente al final de cada conversación.
+Genera automáticamente contenido README desde TOOL_DEFINITIONS / pyproject.toml, soporte multiidioma.
+
+### `auto_save` — Guardado automático de preferencias
+
+```
+preferences  (string[])  Preferencias técnicas expresadas por el usuario (scope=user fijo, entre proyectos)
+extra_tags   (string[])  Etiquetas adicionales
+```
+
+Extrae y almacena automáticamente las preferencias del usuario al final de cada conversación, deduplicación inteligente.
 
 ## 📊 Panel Web
 
@@ -247,37 +259,35 @@ Ejecutar `run install` genera automáticamente las reglas Steering y la configur
 <summary>📋 Ejemplo de Reglas Steering (generado automáticamente)</summary>
 
 ```markdown
-# AIVectorMemory - Memoria Persistente entre Sesiones
+# AIVectorMemory - Reglas de Flujo de Trabajo
 
-## Verificación de Inicio
+## 1. Inicio de Nueva Sesión (ejecutar en orden)
 
-Al inicio de cada nueva sesión, ejecutar en orden:
+1. `recall` (tags: ["conocimiento-proyecto"], scope: "project", top_k: 100) cargar conocimiento del proyecto
+2. `recall` (tags: ["preference"], scope: "user", top_k: 20) cargar preferencias del usuario
+3. `status` (sin parámetro state) leer estado de sesión
+4. Bloqueado → reportar y esperar; No bloqueado → entrar al flujo de procesamiento
 
-1. Llamar `status` (sin parámetros) para leer el estado de la sesión, verificar `is_blocked` y `block_reason`
-2. Llamar `recall` (tags: ["conocimiento-proyecto"], scope: "project") para cargar conocimiento del proyecto
-3. Llamar `recall` (tags: ["preference"], scope: "user") para cargar preferencias del usuario
+## 2. Flujo de Procesamiento de Mensajes
 
-## Cuándo Llamar
+- Paso A: `status` leer estado, esperar si bloqueado
+- Paso B: Clasificar tipo de mensaje (chat/corrección/preferencia/problema de código)
+- Paso C: `track create` registrar problema
+- Paso D: Investigar (`recall` buscar errores + revisar código + encontrar causa raíz)
+- Paso E: Presentar plan al usuario, establecer bloqueo esperando confirmación
+- Paso F: Modificar código (`recall` buscar errores antes de cambios)
+- Paso G: Ejecutar pruebas para verificar
+- Paso H: Establecer bloqueo esperando verificación del usuario
+- Paso I: Usuario confirma → `track archive` + desbloquear
 
-- Nueva sesión: llamar `status` para leer el estado de trabajo anterior
-- Encontrar un error: llamar `remember` para registrar, añadir etiqueta "error"
-- Buscar experiencia histórica: llamar `recall` para búsqueda semántica
-- Encontrar un bug o tarea pendiente: llamar `track` (action: create)
-- Cambio en el progreso: llamar `status` (pasar parámetro state) para actualizar
-- Antes de terminar la conversación: llamar `auto_save` para guardar esta sesión
+## 3. Reglas de Bloqueo
 
-## Gestión del Estado de Sesión
+Debe `status({ is_blocked: true })` al proponer planes o esperar verificación.
+Solo desbloquear tras confirmación explícita del usuario. Nunca auto-desbloquear.
 
-Campos de status: is_blocked, block_reason, current_task, next_step,
-progress[], recent_changes[], pending[]
+## 4-9. Seguimiento de Problemas / Verificación de Código / Gestión Spec/Tareas / Calidad de Memoria / Referencia de Herramientas / Estándares de Desarrollo
 
-⚠️ **Protección de bloqueo**: Al proponer un plan en espera de confirmación o completar una corrección en espera de verificación, siempre llame a `status` para establecer `is_blocked: true` simultáneamente. Esto evita que una nueva sesión asuma erróneamente "confirmado" y ejecute de forma autónoma después de la transferencia de contexto.
-
-## Seguimiento de Problemas
-
-1. `track create` → Registrar problema
-2. `track update` → Actualizar contenido de investigación
-3. `track archive` → Archivar problemas resueltos
+(Reglas completas generadas automáticamente por `run install`)
 ```
 
 </details>
@@ -330,6 +340,23 @@ O agregar env en la configuración MCP:
 | Web | HTTPServer nativo + Vanilla JS |
 
 ## 📋 Registro de Cambios
+
+### v0.2.6
+
+**Reestructuración de reglas Steering**
+- 📝 Documento de reglas Steering reescrito de estructura de 3 secciones a 9 secciones (Inicio de sesión / Flujo de procesamiento / Reglas de bloqueo / Seguimiento de problemas / Revisión de código / Gestión de tareas Spec / Calidad de memoria / Referencia de herramientas / Estándares de desarrollo)
+- 📝 Plantilla STEERING_CONTENT de `install.py` sincronizada, nuevos proyectos obtienen reglas actualizadas al instalar
+- 📝 Tags cambiados de listas fijas a extracción dinámica (palabras clave extraídas del contenido), mejorando la precisión de búsqueda de memoria
+
+**Corrección de errores**
+- 🐛 Herramienta `readme` `handle_readme()` faltaba `**_`, causando error MCP `unexpected keyword argument 'engine'`
+- 🐛 Corrección de paginación de búsqueda de memoria en panel web (filtrado completo antes de paginar con consulta de búsqueda, corrigiendo resultados incompletos)
+
+**Actualizaciones de documentación**
+- 📖 Cantidad de herramientas README 7→8, diagrama de arquitectura `digest`→`task`, añadidas descripciones de herramientas `task`/`readme`
+- 📖 Parámetros de `auto_save` actualizados de `decisions[]/modifications[]/pitfalls[]/todos[]` a `preferences[]/extra_tags[]`
+- 📖 Ejemplo de reglas Steering actualizado de formato de 3 secciones a resumen de 9 secciones
+- 📖 Actualizaciones sincronizadas en 6 versiones de idiomas
 
 ### v0.2.5
 
