@@ -28,19 +28,13 @@ jobs:
             platform: macos-arm64
             vec_asset: sqlite-vec-$SQLITE_VEC_VER-loadable-macos-aarch64.tar.gz
             vec_file: vec0.dylib
-          - os: macos-13
-            goos: darwin
-            goarch: amd64
-            platform: macos-x64
-            vec_asset: sqlite-vec-$SQLITE_VEC_VER-loadable-macos-x86_64.tar.gz
-            vec_file: vec0.dylib
           - os: windows-latest
             goos: windows
             goarch: amd64
             platform: windows-x64
             vec_asset: sqlite-vec-$SQLITE_VEC_VER-loadable-windows-x86_64.zip
             vec_file: vec0.dll
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             goos: linux
             goarch: amd64
             platform: linux-x64
@@ -57,6 +51,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: desktop/go.sum
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -76,11 +71,7 @@ jobs:
 
       - name: Install Windows CGO (mingw-w64)
         if: matrix.goos == 'windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: mingw-w64-x86_64-gcc
+        run: choco install mingw --no-progress -y
 
       # --- Build ---
 
@@ -96,14 +87,11 @@ jobs:
       - name: Build Desktop App (Windows)
         if: matrix.goos == 'windows'
         working-directory: desktop
-        shell: msys2 {0}
         env:
           CGO_ENABLED: "1"
           GOOS: windows
           GOARCH: amd64
-        run: |
-          export PATH="/mingw64/bin:$PATH"
-          wails build
+        run: wails build
 
       # --- Download sqlite-vec ---
 
