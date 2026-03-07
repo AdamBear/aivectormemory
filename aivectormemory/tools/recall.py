@@ -1,9 +1,9 @@
-import json
 from aivectormemory.config import DEFAULT_TOP_K
 from aivectormemory.db.memory_repo import MemoryRepo
 from aivectormemory.db.user_memory_repo import UserMemoryRepo
 from aivectormemory.db.issue_repo import IssueRepo
 from aivectormemory.errors import success_response
+from aivectormemory.i18n.responses import to_json
 
 
 BRIEF_KEYS = {"content", "tags"}
@@ -43,7 +43,7 @@ def handle_recall(args, *, cm, engine, **_):
     else:
         rows = _query_all(cm, engine, query, tags, top_k, source, tags_mode)
 
-    return json.dumps(success_response(memories=_to_brief(rows) if brief else rows))
+    return to_json(success_response(memories=_to_brief(rows) if brief else rows))
 
 
 def _query_user(cm, engine, query, tags, top_k, source, tags_mode="all"):
@@ -104,4 +104,4 @@ def _recall_experience(args, *, cm, engine):
             "tags": ["经验"],
             "similarity": r["similarity"],
         })
-    return json.dumps(success_response(memories=_to_brief(results) if brief else results))
+    return to_json(success_response(memories=_to_brief(results) if brief else results))

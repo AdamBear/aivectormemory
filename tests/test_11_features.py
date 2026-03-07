@@ -46,13 +46,16 @@ check("session_state 有 last_session_id 列", "last_session_id" in cols, f"cols
 
 print("\n#86: remember content 长度限制")
 long_content = "x" * 6000
-result = json.loads(handle_remember(
+result_text = handle_remember(
     {"content": long_content, "tags": ["test_truncate"], "scope": "project"},
     cm=cm, engine=engine, session_id=1
-))
-mid = result.get("id")
+)
+# 从自然语言返回中提取 id
+import re as _re
+_id_match = _re.search(r'([a-f0-9]{12})', result_text)
+mid = _id_match.group(1) if _id_match else None
 mem = MemoryRepo(cm.conn, cm.project_dir).get_by_id(mid)
-check("content 被截断到 5000", len(mem["content"]) == 5000, f"len={len(mem['content'])}")
+check("content 被截断到 5000", mem and len(mem["content"]) == 5000, f"len={len(mem['content']) if mem else 'None'}")
 
 print("\n#94: embedding encode 缓存")
 v1 = engine.encode("test cache hit")
@@ -74,11 +77,11 @@ for c in test_contents:
 repo = MemoryRepo(cm.conn, cm.project_dir)
 before = len(repo.list_by_tags(["batch_del"], scope="project", project_dir=cm.project_dir))
 check("批量删除前有记忆", before >= 3, f"count={before}")
-result = json.loads(handle_forget(
+forget_text = handle_forget(
     {"tags": ["batch_del"], "scope": "project"},
     cm=cm, engine=engine, session_id=1
-))
-check("forget 按标签删除成功", result.get("deleted_count", 0) >= 3, f"deleted={result.get('deleted_count')}")
+)
+check("forget 按标签删除成功", "3" in forget_text or "删除" in forget_text, f"result={forget_text}")
 after = len(repo.list_by_tags(["batch_del"], scope="project", project_dir=cm.project_dir))
 check("删除后无残留", after == 0, f"remaining={after}")
 

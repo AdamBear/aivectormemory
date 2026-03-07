@@ -1,9 +1,9 @@
-import json
 import re
 from pathlib import Path
 from aivectormemory.db.task_repo import TaskRepo
 from aivectormemory.db.issue_repo import IssueRepo
 from aivectormemory.errors import success_response, NotFoundError
+from aivectormemory.i18n.responses import fmt, to_json
 from aivectormemory.utils import validate_title
 
 _SPEC_DIRS = [".kiro/specs", ".cursor/specs", ".windsurf/specs", ".trae/specs", "docs/specs"]
@@ -53,7 +53,7 @@ def handle_task(args, *, cm, **_):
                 if child.get("title", "").strip():
                     validate_title(child["title"].strip())
         result = repo.batch_create(feature_id, tasks, task_type=args.get("task_type", "manual"))
-        return json.dumps(success_response(**result))
+        return fmt("task.batch_create", created=result["created"], skipped=result["skipped"], feature_id=feature_id)
 
     elif action == "update":
         task_id = args.get("task_id")
@@ -72,7 +72,7 @@ def handle_task(args, *, cm, **_):
             for issue in issue_repo.list_by_feature_id(feature_id):
                 if issue["status"] != new_status:
                     issue_repo.update(issue["id"], status=new_status)
-        return json.dumps(success_response(task=result))
+        return fmt("task.update", title=result["title"], status=result.get("status", ""))
 
     elif action == "list":
         feature_id = args.get("feature_id")
@@ -80,14 +80,14 @@ def handle_task(args, *, cm, **_):
             raise ValueError("feature_id is required for list")
         status = args.get("status")
         tasks = repo.list_by_feature(feature_id=feature_id, status=status)
-        return json.dumps(success_response(tasks=tasks))
+        return to_json(success_response(tasks=tasks))
 
     elif action == "archive":
         feature_id = args.get("feature_id", "").strip()
         if not feature_id:
             raise ValueError("feature_id is required for archive")
         result = repo.archive_by_feature(feature_id)
-        return json.dumps(success_response(**result))
+        return fmt("task.archive", feature_id=feature_id, archived=result.get("archived", 0))
 
     elif action == "delete":
         task_id = args.get("task_id")
@@ -96,7 +96,7 @@ def handle_task(args, *, cm, **_):
         result = repo.delete(int(task_id))
         if not result:
             raise NotFoundError("Task", task_id)
-        return json.dumps(success_response(deleted=result))
+        return fmt("task.delete")
 
     else:
         raise ValueError(f"Unknown action: {action}")

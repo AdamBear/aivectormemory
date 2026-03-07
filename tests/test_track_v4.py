@@ -33,9 +33,10 @@ def test_create_with_parent_id():
     conn, db_path = setup()
     try:
         cm = FakeCM(conn)
-        result = json.loads(handle_track({"action": "create", "title": "child", "parent_id": 42}, cm=cm))
-        assert result["success"]
-        row = conn.execute("SELECT parent_id FROM issues WHERE id=?", (result["id"],)).fetchone()
+        result = handle_track({"action": "create", "title": "child", "parent_id": 42}, cm=cm)
+        assert isinstance(result, str)
+        assert "#" in result
+        row = conn.execute("SELECT parent_id FROM issues WHERE issue_number=1", ()).fetchone()
         assert row["parent_id"] == 42
         print("PASS: create with parent_id")
     finally:
@@ -47,12 +48,10 @@ def test_delete():
     conn, db_path = setup()
     try:
         cm = FakeCM(conn)
-        created = json.loads(handle_track({"action": "create", "title": "to delete"}, cm=cm))
-        issue_number = created["issue_number"]
-        result = json.loads(handle_track({"action": "delete", "issue_id": issue_number}, cm=cm))
-        assert result["success"]
-        assert result["deleted"] is True
-        row = conn.execute("SELECT * FROM issues WHERE issue_number=?", (issue_number,)).fetchone()
+        handle_track({"action": "create", "title": "to delete"}, cm=cm)
+        result = handle_track({"action": "delete", "issue_id": 1}, cm=cm)
+        assert isinstance(result, str)
+        row = conn.execute("SELECT * FROM issues WHERE issue_number=1", ()).fetchone()
         assert row is None
         print("PASS: delete")
     finally:
@@ -64,21 +63,18 @@ def test_update_structured_fields():
     conn, db_path = setup()
     try:
         cm = FakeCM(conn)
-        created = json.loads(handle_track({"action": "create", "title": "structured"}, cm=cm))
-        issue_number = created["issue_number"]
-        result = json.loads(handle_track({
+        handle_track({"action": "create", "title": "structured"}, cm=cm)
+        issue_number = 1
+        result = handle_track({
             "action": "update", "issue_id": issue_number,
             "description": "desc", "investigation": "inv",
             "root_cause": "rc", "solution": "sol",
             "files_changed": '[{"path":"a.py","done":true}]',
             "test_result": "pass", "notes": "note",
             "feature_id": "feat-1"
-        }, cm=cm))
-        assert result["success"]
-        issue = result["issue"]
-        assert issue["issue_number"] == issue_number
-        assert issue["status"] == "pending"
-        assert "updated_at" in issue
+        }, cm=cm)
+        assert isinstance(result, str)
+        assert f"#{issue_number}" in result
         # 验证完整字段通过 get_by_id
         from aivectormemory.db.issue_repo import IssueRepo
         full = IssueRepo(conn, "/test").get_by_number(issue_number)
