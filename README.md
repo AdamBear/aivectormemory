@@ -45,6 +45,12 @@
   源码加QQ群或微信获取
 </p>
 <p align="center">
+  <img src="docs/003.png" alt="登录界面" width="100%">
+  <br>
+  <em>登录界面</em>
+</p>
+
+<p align="center">
   <img src="docs/001.png" alt="项目选择" width="100%">
   <br>
   <em>项目选择</em>
