@@ -17,3 +17,14 @@ to this in your browser, and you can call your Go code from devtools.
 ## Building
 
 To build a redistributable, production mode package, use `wails build`.
+
+For a macOS drag-install image that lets users drop the app into `Applications`, run:
+
+```bash
+cd desktop
+/tmp/gopath/bin/wails build -clean -platform darwin/amd64 -m -nosyncgomod
+./build/package_dmg.sh
+```
+
+The resulting installer image is written to `build/bin/AIVectorMemory-darwin-amd64.dmg`.
+The DMG window automatically uses `docs/image.png` as the background and applies a 60% white overlay without additional decorative elements.
