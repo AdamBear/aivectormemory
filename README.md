@@ -365,6 +365,19 @@ Or add env to MCP config:
 
 ## 📋 Changelog
 
+### v1.0.11
+
+- 🐛 Desktop app version comparison switched to semantic versioning, fixing false upgrade prompts when local version is higher
+- 🐛 Health check page field names aligned with backend, fixing consistency status always showing Mismatch
+- 🔧 check_track.sh hook adds Python fallback, resolving silent hook failure when system sqlite3 is unavailable (#4)
+
+### v1.0.10
+
+- 🖥️ Desktop app one-click install + upgrade detection
+- 🖥️ Auto-detect Python and aivectormemory installation status on startup
+- 🖥️ Show one-click install button when not installed, check PyPI and desktop new versions when installed
+- 🐛 Installation detection switched to importlib.metadata.version() for accurate package version
+
 ### v1.0.8
 
 - 🔧 Fix PyPI package size anomaly (sdist from 32MB down to 230KB), excluded accidentally packaged dev files

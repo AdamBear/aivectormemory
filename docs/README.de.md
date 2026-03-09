@@ -359,6 +359,19 @@ Oder env in der MCP-Konfiguration hinzufügen:
 
 ## 📋 Änderungsprotokoll
 
+### v1.0.11
+
+- 🐛 Desktop-Versionsvergleich auf semantische Versionierung umgestellt, falsche Upgrade-Meldungen bei höherer lokaler Version behoben
+- 🐛 Feldnamen der Gesundheitsprüfungsseite mit Backend abgeglichen, Konsistenzstatus zeigte immer Mismatch an — behoben
+- 🔧 check_track.sh Hook mit Python-Fallback ergänzt, behebt stilles Hook-Versagen ohne System-sqlite3 (#4)
+
+### v1.0.10
+
+- 🖥️ Desktop-App Ein-Klick-Installation + Upgrade-Erkennung
+- 🖥️ Automatische Erkennung des Python- und aivectormemory-Installationsstatus beim Start
+- 🖥️ Ein-Klick-Installationsbutton bei fehlender Installation, Erkennung neuer PyPI- und Desktop-Versionen bei vorhandener Installation
+- 🐛 Installationserkennung auf importlib.metadata.version() umgestellt für genaue Paketversion
+
 ### v1.0.3
 
 **recall Suchoptimierung**

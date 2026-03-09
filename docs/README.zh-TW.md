@@ -359,6 +359,19 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ## 📋 更新日誌
 
+### v1.0.11
+
+- 🐛 桌面端版本比較改為語義版本比較，修復本地版本較高時誤報升級
+- 🐛 健康檢查頁面欄位名稱與後端對齊，修復一致性狀態永遠顯示 Mismatch
+- 🔧 check_track.sh hook 新增 Python fallback，解決無系統 sqlite3 時 hook 靜默失敗（#4）
+
+### v1.0.10
+
+- 🖥️ 桌面端一鍵安裝 + 升級檢測功能
+- 🖥️ 啟動時自動檢測 Python 和 aivectormemory 安裝狀態
+- 🖥️ 未安裝時顯示一鍵安裝按鈕，已安裝時檢測 PyPI 和桌面端新版本
+- 🐛 安裝檢測改用 importlib.metadata.version() 取得準確套件版本
+
 ### v1.0.3
 
 **recall 搜尋優化**

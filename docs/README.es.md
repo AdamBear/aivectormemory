@@ -359,6 +359,19 @@ O agregar env en la configuración MCP:
 
 ## 📋 Registro de Cambios
 
+### v1.0.11
+
+- 🐛 Comparación de versión del escritorio cambiada a versionado semántico, corrigiendo falsas alertas de actualización cuando la versión local es superior
+- 🐛 Nombres de campos de la página de verificación de salud alineados con el backend, corrigiendo el estado de consistencia que siempre mostraba Mismatch
+- 🔧 Hook check_track.sh con fallback de Python añadido, resolviendo fallo silencioso del hook sin sqlite3 del sistema (#4)
+
+### v1.0.10
+
+- 🖥️ Instalación con un clic de la app de escritorio + detección de actualización
+- 🖥️ Detección automática del estado de instalación de Python y aivectormemory al iniciar
+- 🖥️ Botón de instalación con un clic si no está instalado, detección de nuevas versiones de PyPI y escritorio si está instalado
+- 🐛 Detección de instalación cambiada a importlib.metadata.version() para versión precisa del paquete
+
 ### v1.0.3
 
 **Optimización de búsqueda recall**

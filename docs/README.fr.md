@@ -359,6 +359,19 @@ Ou ajouter env dans la configuration MCP :
 
 ## 📋 Journal des Modifications
 
+### v1.0.11
+
+- 🐛 Comparaison de version du client de bureau passée au versionnage sémantique, correction des fausses alertes de mise à jour quand la version locale est supérieure
+- 🐛 Noms des champs de la page de vérification de santé alignés avec le backend, correction du statut de cohérence affichant toujours Mismatch
+- 🔧 Hook check_track.sh avec fallback Python ajouté, résolution de l'échec silencieux du hook sans sqlite3 système (#4)
+
+### v1.0.10
+
+- 🖥️ Installation en un clic du client de bureau + détection de mise à jour
+- 🖥️ Détection automatique de l'état d'installation de Python et aivectormemory au démarrage
+- 🖥️ Bouton d'installation en un clic si non installé, détection des nouvelles versions PyPI et bureau si installé
+- 🐛 Détection d'installation passée à importlib.metadata.version() pour une version de paquet précise
+
 ### v1.0.3
 
 **Optimisation de la recherche recall**

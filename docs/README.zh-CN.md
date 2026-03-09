@@ -366,6 +366,19 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ## 📋 更新日志
 
+### v1.0.11
+
+- 🐛 桌面端版本比较改为语义版本比较，修复本地版本更高时误报升级
+- 🐛 健康检查页面字段名与后端对齐，修复一致性状态永远显示 Mismatch
+- 🔧 check_track.sh hook 添加 Python fallback，解决无系统 sqlite3 时 hook 静默失败（#4）
+
+### v1.0.10
+
+- 🖥️ 桌面端一键安装 + 升级检测功能
+- 🖥️ 启动时自动检测 Python 和 aivectormemory 安装状态
+- 🖥️ 未安装时显示一键安装按钮，已安装时检测 PyPI 和桌面端新版本
+- 🐛 安装检测改用 importlib.metadata.version() 获取准确包版本
+
 ### v1.0.8
 
 - 🔧 修复 PyPI 安装包体积异常（sdist 从 32MB 降至 230KB），排除了误打包的开发文件
