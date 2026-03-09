@@ -33,14 +33,21 @@ func findVecExtension() (string, error) {
 		candidates = append(candidates, path)
 	}
 
-	// 2. Common locations
-	home, _ := os.UserHomeDir()
-	ext := ".so"
-	if runtime.GOOS == "darwin" {
-		ext = ".dylib"
-	} else if runtime.GOOS == "windows" {
-		ext = ".dll"
+	// 2. App bundle / executable directory
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		if runtime.GOOS == "darwin" {
+			// macOS .app bundle: Contents/MacOS/../Resources/
+			resourcesDir := filepath.Join(execDir, "..", "Resources")
+			candidates = append(candidates, filepath.Join(resourcesDir, "vec0.dylib"))
+		}
+		// Alongside executable (Windows installed dir, or dev)
+		candidates = append(candidates, filepath.Join(execDir, "vec0"+extForOS()))
 	}
+
+	// 3. Common locations
+	home, _ := os.UserHomeDir()
+	ext := extForOS()
 
 	candidates = append(candidates,
 		filepath.Join(home, ".aivectormemory", "vec0"+ext),
@@ -61,6 +68,17 @@ func findVecExtension() (string, error) {
 	}
 
 	return "", fmt.Errorf("vec0 extension not found in any known location")
+}
+
+func extForOS() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return ".dylib"
+	case "windows":
+		return ".dll"
+	default:
+		return ".so"
+	}
 }
 
 func findVecViaPython() string {

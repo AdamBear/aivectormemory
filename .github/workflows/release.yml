@@ -125,7 +125,7 @@ jobs:
 
       # --- Package ---
 
-      - name: Package (macOS)
+      - name: Package (macOS zip)
         if: matrix.goos == 'darwin'
         shell: bash
         run: |
@@ -138,7 +138,21 @@ jobs:
           cp README.md "$PKG_NAME/"
           zip -r "${PKG_NAME}.zip" "$PKG_NAME"
 
-      - name: Package (Windows)
+      - name: Package (macOS DMG)
+        if: matrix.goos == 'darwin'
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          # Bundle vec0.dylib inside .app/Contents/Resources/
+          mkdir -p desktop/build/bin/AIVectorMemory.app/Contents/Resources
+          cp "${{ matrix.vec_file }}" desktop/build/bin/AIVectorMemory.app/Contents/Resources/
+          # Build DMG
+          chmod +x desktop/build/package_dmg.sh
+          bash desktop/build/package_dmg.sh \
+            desktop/build/bin/AIVectorMemory.app \
+            "AIVectorMemory-${VERSION}-${{ matrix.platform }}.dmg"
+
+      - name: Package (Windows zip)
         if: matrix.goos == 'windows'
         shell: bash
         run: |
@@ -150,6 +164,14 @@ jobs:
           cp scripts/install.bat "$PKG_NAME/"
           cp README.md "$PKG_NAME/"
           7z a "${PKG_NAME}.zip" "$PKG_NAME"
+
+      - name: Package (Windows Setup)
+        if: matrix.goos == 'windows'
+        shell: cmd
+        run: |
+          set VERSION=${{ steps.version.outputs.tag }}
+          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VERSION% /DMySourceDir=AIVectorMemory-%VERSION%-${{ matrix.platform }} desktop\build\installer.iss
+          move desktop\build\Output\AIVectorMemory-setup.exe AIVectorMemory-%VERSION%-${{ matrix.platform }}-setup.exe
 
       - name: Package (Linux)
         if: matrix.goos == 'linux'
@@ -171,7 +193,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}
-          path: AIVectorMemory-*.*
+          path: |
+            AIVectorMemory-*.zip
+            AIVectorMemory-*.tar.gz
+            AIVectorMemory-*.dmg
+            AIVectorMemory-*-setup.exe
           retention-days: 5
 
   release:
@@ -212,3 +238,5 @@ jobs:
           files: |
             artifacts/**/*.zip
             artifacts/**/*.tar.gz
+            artifacts/**/*.dmg
+            artifacts/**/*-setup.exe

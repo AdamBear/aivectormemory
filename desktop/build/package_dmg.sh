@@ -84,11 +84,11 @@ if [[ -z "${DEVICE}" || -z "${MOUNT_POINT}" ]]; then
   exit 1
 fi
 
-if command -v osascript >/dev/null 2>&1; then
+if command -v osascript >/dev/null 2>&1 && [ -z "${CI:-}" ]; then
   APP_BUNDLE_NAME="$(basename "${APP_BUNDLE}")"
   BACKGROUND_FILE_NAME="$(basename "${BACKGROUND_IMAGE}")"
   HAS_BACKGROUND_VALUE="${HAS_BACKGROUND}"
-  osascript <<EOF_APPLESCRIPT >/dev/null
+  osascript <<EOF_APPLESCRIPT >/dev/null 2>&1 || echo "Note: Finder layout skipped (no GUI)"
 on run
   tell application "Finder"
     tell disk "${VOLUME_NAME}"
