@@ -170,7 +170,7 @@ jobs:
         shell: cmd
         run: |
           set VERSION=${{ steps.version.outputs.tag }}
-          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VERSION% /DMySourceDir=AIVectorMemory-%VERSION%-${{ matrix.platform }} desktop\build\installer.iss
+          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VERSION% /DMySourceDir=..\..\AIVectorMemory-%VERSION%-${{ matrix.platform }} desktop\build\installer.iss
           move desktop\build\Output\AIVectorMemory-setup.exe AIVectorMemory-%VERSION%-${{ matrix.platform }}-setup.exe
 
       - name: Package (Linux)
