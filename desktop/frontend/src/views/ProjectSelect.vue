@@ -7,6 +7,7 @@ import { useSettingsStore } from '../stores/settings'
 import { LANGS } from '../i18n'
 import Modal from '../components/layout/Modal.vue'
 import { BrowseDirectory, SelectDirectory, SetLanguage, CheckEnvironment, CheckUpgrade, InstallPackage } from '../../wailsjs/go/main/App'
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime'
 
 const router = useRouter()
 const { t, locale } = useI18n()
@@ -58,7 +59,7 @@ async function handleInstall(upgrade = false) {
 }
 
 function openDownloadUrl(url: string) {
-  window.open(url, '_blank')
+  BrowserOpenURL(url)
 }
 
 function enterProject(p: Project) {

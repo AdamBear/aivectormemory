@@ -120,15 +120,23 @@ STEERING_CONTENT = """# AIVectorMemory - 工作规则
 2. 编写 `requirements.md`：需求文档，明确功能范围和验收标准
 3. 用户确认需求后，编写 `design.md`：设计文档，技术方案和架构
 4. 用户确认设计后，编写 `tasks.md`：任务文档，拆分为最小可执行单元
-5. 同步调用 `task`（action: batch_create, feature_id: spec 目录名）将任务写入数据库
 
-**⚠️ 步骤 2→3→4 严格顺序执行，禁止跳过 design.md 直接写 tasks.md。每步必须等用户确认后才能进入下一步。**
+**⚠️ 步骤 2→3→4 严格顺序执行，禁止跳过 design.md 直接写 tasks.md。每步编写完成后必须先执行文档审查，再提交用户确认，确认后才能进入下一步。**
+
+**⚠️ 文档审查规范（步骤 2/3/4 每步完成后、提交用户确认前必须执行）**：
+- **审查方法**：先正向检查文档内容是否合理完整，再使用**代码反向扫描法**——Grep 搜索所有相关关键词覆盖全部源文件，逐条比对文档是否覆盖。禁止仅做正向检查就声称"已完整覆盖"
+- **requirements.md**：正向——检查功能范围和验收标准是否清晰完整；反向——从代码搜索所有涉及的模块和函数，确认需求未遗漏功能点
+- **design.md**：正向——检查每个需求点是否都有对应设计方案；反向——按数据流向逐层扫描（存储 → 数据层 → 业务层 → 接口层/API → 展示层），特别关注中间层断链（如数据模型加了字段但接口层没返回、API 响应缺少新字段）
+- **tasks.md**：正向——检查任务拆分粒度和执行顺序是否合理；反向——同时对照 requirements.md（确认每个功能点和验收标准都有任务覆盖）和 design.md（逐条对照每个章节每个变更点，确认每个设计点都有对应任务），禁止遗漏
+
+5. 用户确认 tasks.md 后，同步调用 `task`（action: batch_create, feature_id: spec 目录名）将任务写入数据库
+   - **必须使用 children 嵌套结构**：父任务为分组（如"第1组：数据库变更"），具体任务放在 children 数组中，禁止将所有任务打平为同级
 6. 按任务文档顺序执行子任务（见下方「子任务执行流程」）
 7. 全部完成后调用 `task`（action: list）确认无遗漏
 
 **子任务执行流程**（Hook 强制检查，不执行将被 Edit/Write 拦截）：
 1. 开始前：`task`（action: update, task_id: X, status: in_progress）标记当前子任务
-2. 执行代码修改
+2. **读取 design.md 对应章节**，严格按设计实现代码修改（设计文档是唯一实现依据，禁止凭记忆编码）
 3. 完成后：`task`（action: update, task_id: X, status: completed）更新状态（自动同步 tasks.md checkbox）
 4. 立即进入下一个子任务，重复 1-3
 
@@ -143,7 +151,7 @@ STEERING_CONTENT = """# AIVectorMemory - 工作规则
 - 按顺序执行禁止跳过，禁止用"后续迭代"跳过任务
 - **开始任务前必须先检查 tasks.md，确认该任务之前的所有任务已标记 `[x]`，有未完成的前置任务必须先完成，禁止跳组执行**
 
-**自检**：整理任务文档时必须打开设计文档逐条核对，发现遗漏先补充再执行。全部完成后 `task list` 确认无遗漏
+**自检**：整理任务文档时必须打开设计文档逐条核对，发现遗漏先补充再执行。全部完成后 `task list` 确认无遗漏。任务执行中如发现设计文档有遗漏，必须先更新 design.md 再继续实现
 
 **不需要 spec 的场景**：单文件修改、简单 bug、配置调整 → 直接 `track create` 走问题追踪流程
 
@@ -168,7 +176,7 @@ STEERING_CONTENT = """# AIVectorMemory - 工作规则
 | forget | 删除记忆 | memory_id / memory_ids |
 | status | 会话状态 | state(不传=读, 传=更新), clear_fields |
 | track | 问题跟踪 | action(create/update/archive/delete/list) |
-| task | 任务管理 | action(batch_create/update/list/delete/archive), feature_id |
+| task | 任务管理 | action(batch_create/update/list/delete/archive), feature_id, tasks[].children（嵌套子任务） |
 | readme | README生成 | action(generate/diff), lang, sections |
 | auto_save | 保存偏好 | preferences, extra_tags |
 

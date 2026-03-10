@@ -234,11 +234,51 @@ func buildTaskGroups(allTasks []Task, projectDir string, d *DB) []TaskGroup {
 		groupMap[fid].Tasks = append(groupMap[fid].Tasks, t)
 	}
 
-	// Count progress
+	// Count progress — only leaf tasks (children + flat tops without children), aligned with Python get_task_progress_batch
 	for fid, g := range groupMap {
-		var total, done int
-		d.QueryRow("SELECT COUNT(*) FROM tasks WHERE project_dir=? AND feature_id=?", projectDir, fid).Scan(&total)
-		d.QueryRow("SELECT COUNT(*) FROM tasks WHERE project_dir=? AND feature_id=? AND status='completed'", projectDir, fid).Scan(&done)
+		rows, err := d.Query("SELECT id, status, parent_id FROM tasks WHERE project_dir=? AND feature_id=?", projectDir, fid)
+		if err != nil {
+			continue
+		}
+		type taskRow struct {
+			id       int
+			status   string
+			parentID int
+		}
+		var all []taskRow
+		for rows.Next() {
+			var r taskRow
+			rows.Scan(&r.id, &r.status, &r.parentID)
+			all = append(all, r)
+		}
+		rows.Close()
+
+		parentWithChildren := map[int]bool{}
+		var children []taskRow
+		for _, r := range all {
+			if r.parentID != 0 {
+				children = append(children, r)
+				parentWithChildren[r.parentID] = true
+			}
+		}
+		var flatTops []taskRow
+		for _, r := range all {
+			if r.parentID == 0 && !parentWithChildren[r.id] {
+				flatTops = append(flatTops, r)
+			}
+		}
+		total := len(children) + len(flatTops)
+		done := 0
+		for _, r := range children {
+			if r.status == "completed" {
+				done++
+			}
+		}
+		for _, r := range flatTops {
+			if r.status == "completed" {
+				done++
+			}
+		}
 		g.Total = total
 		g.Done = done
 	}

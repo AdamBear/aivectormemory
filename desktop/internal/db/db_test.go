@@ -172,8 +172,8 @@ func TestTasksCRUD(t *testing.T) {
 	if groups[0].FeatureID != "test-feature" {
 		t.Fatalf("expected test-feature, got %s", groups[0].FeatureID)
 	}
-	if groups[0].Total != 4 {
-		t.Fatalf("expected total 4, got %d", groups[0].Total)
+	if groups[0].Total != 3 {
+		t.Fatalf("expected total 3 (leaf tasks only), got %d", groups[0].Total)
 	}
 
 	// Update
