@@ -30,10 +30,11 @@ class MemoryRepo(BaseMemoryRepo):
         source = filters.get("source")
         return not source or mem.get("source", "manual") == source
 
-    def list_by_tags(self, tags: list[str], scope: str = "all", project_dir: str = "",
-                     limit: int = 100, source: str | None = None,
-                     tags_mode: str = "all", **_) -> list[dict]:
-        sql, params = "SELECT * FROM memories WHERE 1=1", []
+    def _build_tag_filter(self, base_sql: str, tags: list[str],
+                          tags_mode: str, scope: str = "all",
+                          project_dir: str = "", source: str | None = None,
+                          query: str | None = None) -> tuple[str, list]:
+        sql, params = base_sql, []
         if scope == "project":
             sql += " AND project_dir=?"
             params.append(project_dir or self.project_dir)
@@ -48,25 +49,62 @@ class MemoryRepo(BaseMemoryRepo):
             for tag in tags:
                 sql += " AND id IN (SELECT memory_id FROM memory_tags WHERE tag=?)"
                 params.append(tag)
-        sql += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
+        if query:
+            sql += " AND content LIKE ?"
+            params.append(f"%{query}%")
+        return sql, params
+
+    def list_by_tags(self, tags: list[str], scope: str = "all", project_dir: str = "",
+                     limit: int = 100, offset: int = 0, source: str | None = None,
+                     tags_mode: str = "all", query: str | None = None, **_) -> list[dict]:
+        sql, params = self._build_tag_filter(
+            "SELECT * FROM memories WHERE 1=1",
+            tags, tags_mode, scope, project_dir, source, query)
+        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
 
-    def get_all(self, limit: int = 100, offset: int = 0, project_dir: str | None = None) -> list[dict]:
-        if project_dir is not None:
-            rows = self.conn.execute(
-                "SELECT * FROM memories WHERE project_dir = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                (project_dir, limit, offset)).fetchall()
-        else:
-            rows = self.conn.execute(
-                "SELECT * FROM memories ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                (limit, offset)).fetchall()
-        return [dict(r) for r in rows]
+    def count_by_tags(self, tags: list[str], scope: str = "all", project_dir: str = "",
+                      source: str | None = None, tags_mode: str = "all",
+                      query: str | None = None) -> int:
+        sql, params = self._build_tag_filter(
+            "SELECT COUNT(*) FROM memories WHERE 1=1",
+            tags, tags_mode, scope, project_dir, source, query)
+        return self.conn.execute(sql, params).fetchone()[0]
 
-    def count(self, project_dir: str | None = None) -> int:
+    def _build_filter(self, base_sql: str, project_dir: str | None = None,
+                      query: str | None = None, source: str | None = None,
+                      exclude_tags: list[str] | None = None) -> tuple[str, list]:
+        sql, params = base_sql, []
         if project_dir is not None:
-            return self.conn.execute("SELECT COUNT(*) FROM memories WHERE project_dir=?", (project_dir,)).fetchone()[0]
-        return self.conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+            sql += " AND project_dir = ?"
+            params.append(project_dir)
+        if query:
+            sql += " AND content LIKE ?"
+            params.append(f"%{query}%")
+        if source:
+            sql += " AND source = ?"
+            params.append(source)
+        if exclude_tags:
+            for tag in exclude_tags:
+                sql += " AND id NOT IN (SELECT memory_id FROM memory_tags WHERE tag=?)"
+                params.append(tag)
+        return sql, params
+
+    def get_all(self, limit: int = 100, offset: int = 0, project_dir: str | None = None,
+                query: str | None = None, source: str | None = None,
+                exclude_tags: list[str] | None = None) -> list[dict]:
+        sql, params = self._build_filter(
+            "SELECT * FROM memories WHERE 1=1", project_dir, query, source, exclude_tags)
+        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def count(self, project_dir: str | None = None, query: str | None = None,
+             source: str | None = None, exclude_tags: list[str] | None = None) -> int:
+        sql, params = self._build_filter(
+            "SELECT COUNT(*) FROM memories WHERE 1=1", project_dir, query, source, exclude_tags)
+        return self.conn.execute(sql, params).fetchone()[0]
 
     def get_tag_counts(self, project_dir: str | None = None) -> dict[str, int]:
         if project_dir is not None:

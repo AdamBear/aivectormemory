@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aivectormemory"
-version = "1.0.17"
+version = "1.0.18"
 description = "轻量级 MCP Server，为 AI 编程助手提供跨会话持久记忆能力"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "sqlite-vec>=0.1.0",
     "onnxruntime>=1.16",
+    "onnx>=1.14",
     "tokenizers>=0.15",
     "huggingface-hub>=0.20",
     "numpy>=1.24",

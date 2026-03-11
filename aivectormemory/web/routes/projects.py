@@ -48,7 +48,7 @@ def get_projects(cm):
     projects = {}
     for r in rows:
         pd = r["project_dir"]
-        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tags": set()})
+        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tag_count": 0})
         projects[pd]["memories"] = r["mem_count"]
 
     issue_rows = conn.execute(
@@ -59,28 +59,30 @@ def get_projects(cm):
     ).fetchall()
     for r in issue_rows:
         pd = r["project_dir"]
-        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tags": set()})
+        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tag_count": 0})
         projects[pd]["issues"] += r["cnt"]
     for r in archive_rows:
         pd = r["project_dir"]
-        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tags": set()})
+        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tag_count": 0})
         projects[pd]["issues"] += r["cnt"]
 
     state_rows = conn.execute("SELECT project_dir FROM session_state").fetchall()
     for r in state_rows:
         pd = r["project_dir"]
-        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tags": set()})
+        projects.setdefault(pd, {"project_dir": pd, "memories": 0, "issues": 0, "tag_count": 0})
 
-    tag_rows = conn.execute("SELECT project_dir, tags FROM memories").fetchall()
+    tag_rows = conn.execute(
+        "SELECT m.project_dir, COUNT(DISTINCT mt.tag) as tag_count "
+        "FROM memories m JOIN memory_tags mt ON m.id = mt.memory_id "
+        "GROUP BY m.project_dir"
+    ).fetchall()
     for r in tag_rows:
         pd = r["project_dir"]
         if pd in projects:
-            tags = json.loads(r["tags"]) if isinstance(r["tags"], str) else (r["tags"] or [])
-            projects[pd]["tags"].update(tags)
+            projects[pd]["tag_count"] = r["tag_count"]
 
     user_repo = UserMemoryRepo(conn)
-    user_tag_counts = user_repo.get_tag_counts()
-    user_tags = set(user_tag_counts.keys())
+    user_tag_count = conn.execute("SELECT COUNT(DISTINCT tag) FROM user_memory_tags").fetchone()[0]
     user_count = user_repo.count()
 
     result = []
@@ -93,7 +95,7 @@ def get_projects(cm):
             "memories": info["memories"],
             "user_memories": user_count,
             "issues": info["issues"],
-            "tags": len(info["tags"] | user_tags),
+            "tags": info.get("tag_count", 0) + user_tag_count,
         })
     return {"projects": result}
 

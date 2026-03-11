@@ -74,6 +74,6 @@ export default {
     login: 'Anmelden', loginDesc: 'Melden Sie sich bei Ihrem AIVectorMemory-Konto an', createAccount: 'Konto erstellen', createAccountDesc: 'Neues AIVectorMemory-Konto registrieren',
     register: 'Registrieren', username: 'Benutzername', usernamePlaceholder: 'Benutzername eingeben', password: 'Passwort', passwordPlaceholder: 'Passwort eingeben',
     confirmPassword: 'Passwort bestatigen', confirmPasswordPlaceholder: 'Passwort erneut eingeben', fieldsRequired: 'Alle Felder sind erforderlich',
-    passwordTooShort: 'Passwort muss mindestens 6 Zeichen haben', passwordMismatch: 'Passworter stimmen nicht uberein', noAccount: 'Kein Konto?', hasAccount: 'Bereits ein Konto?', logout: 'Abmelden',
+    passwordTooShort: 'Passwort muss mindestens 6 Zeichen haben', passwordMismatch: 'Passworter stimmen nicht uberein', rememberPassword: 'Passwort merken', noAccount: 'Kein Konto?', hasAccount: 'Bereits ein Konto?', logout: 'Abmelden',
   },
 }

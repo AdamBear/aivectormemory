@@ -783,6 +783,8 @@ body {
 }
 .auth-page .form-input:focus { border-color: var(--accent); box-shadow: var(--shadow-focus); }
 .auth-page .btn--full { width: 100%; display: flex; align-items: center; justify-content: center; margin-top: 8px; }
+.remember-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: pointer; margin-top: 4px; margin-bottom: 4px; user-select: none; }
+.remember-check input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .auth-switch { text-align: center; font-size: 13px; color: var(--text-secondary); margin-top: 20px; }
 .btn-link { background: none; border: none; color: var(--accent, #6366F1); cursor: pointer; font-size: 13px; padding: 0; }
 .btn-link:hover { text-decoration: underline; }

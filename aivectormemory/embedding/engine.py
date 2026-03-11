@@ -3,15 +3,18 @@ import sys
 import numpy as np
 from functools import lru_cache
 from pathlib import Path
-from aivectormemory.config import MODEL_NAME, MODEL_DIMENSION
+from aivectormemory.config import MODEL_NAME, MODEL_DIMENSION, DB_DIR
 from aivectormemory.log import log
+
+QUANTIZED_DIR = DB_DIR / "models"
+QUANTIZED_FILENAME = "model_int8.onnx"
 
 
 class EmbeddingEngine:
     def __init__(self):
         self._session = None
         self._tokenizer = None
-        self._encode_cached = lru_cache(maxsize=4096)(self._encode_impl)
+        self._encode_cached = lru_cache(maxsize=1024)(self._encode_impl)
 
     @property
     def ready(self) -> bool:
@@ -30,15 +33,17 @@ class EmbeddingEngine:
             self._tokenizer.enable_padding()
             self._tokenizer.enable_truncation(max_length=512)
 
-            model_path = model_dir / "model.onnx"
-            if not model_path.exists():
-                model_path = model_dir / "onnx" / "model.onnx"
+            fp32_path = model_dir / "model.onnx"
+            if not fp32_path.exists():
+                fp32_path = model_dir / "onnx" / "model.onnx"
+
+            model_path = self._get_quantized_model(fp32_path)
 
             self._session = ort.InferenceSession(
                 str(model_path),
                 providers=["CPUExecutionProvider"]
             )
-            log.info("Embedding model loaded: %s", MODEL_NAME)
+            log.info("Embedding model loaded: %s (quantized=%s)", MODEL_NAME, model_path != fp32_path)
         except Exception as e:
             log.error("Failed to load embedding model: %s", e)
             raise
@@ -52,6 +57,28 @@ class EmbeddingEngine:
                            "special_tokens_map.json", "config.json"]
         ))
         return model_dir
+
+    def _get_quantized_model(self, fp32_path: Path) -> Path:
+        quantized_path = QUANTIZED_DIR / QUANTIZED_FILENAME
+        if quantized_path.exists():
+            return quantized_path
+        tmp_path = quantized_path.with_suffix(".tmp")
+        try:
+            from onnxruntime.quantization import quantize_dynamic, QuantType
+            QUANTIZED_DIR.mkdir(parents=True, exist_ok=True)
+            log.info("Quantizing model to INT8 (first time only)...")
+            quantize_dynamic(str(fp32_path), str(tmp_path), weight_type=QuantType.QInt8)
+            tmp_path.rename(quantized_path)
+            log.info("Quantized model saved: %s (%.0fMB -> %.0fMB)",
+                     quantized_path,
+                     fp32_path.stat().st_size / 1024 / 1024,
+                     quantized_path.stat().st_size / 1024 / 1024)
+            return quantized_path
+        except Exception as e:
+            log.warning("INT8 quantization unavailable (%s), using FP32 model", e)
+            if tmp_path.exists():
+                tmp_path.unlink()
+            return fp32_path
 
     def encode(self, text: str) -> list[float]:
         if not self.ready:

@@ -10,73 +10,71 @@ def get_memories(cm, params, pdir):
     query = params.get("query", [None])[0]
     tag = params.get("tag", [None])[0]
     source = params.get("source", [None])[0]
-    exclude_tags = params.get("exclude_tags", [None])[0]
+    exclude_tags_raw = params.get("exclude_tags", [None])[0]
     limit = int(params.get("limit", [100])[0])
     offset = int(params.get("offset", [0])[0])
 
     repo = MemoryRepo(cm.conn, pdir)
     user_repo = UserMemoryRepo(cm.conn)
+    ex_tags = exclude_tags_raw.split(",") if exclude_tags_raw else None
 
     if tag:
+        # SQL-level: tag + query + source filtering with pagination
         if scope == "user":
-            all_rows = user_repo.list_by_tags([tag], limit=9999, source=source)
+            results = user_repo.list_by_tags([tag], limit=limit, offset=offset, source=source, query=query)
+            total = user_repo.count_by_tags([tag], source=source, query=query)
         elif scope == "project":
-            all_rows = repo.list_by_tags([tag], scope="project", project_dir=pdir, limit=9999, source=source)
+            results = repo.list_by_tags([tag], scope="project", project_dir=pdir, limit=limit, offset=offset, source=source, query=query)
+            total = repo.count_by_tags([tag], scope="project", project_dir=pdir, source=source, query=query)
         else:
-            proj_rows = repo.list_by_tags([tag], scope="project", project_dir=pdir, limit=9999, source=source)
-            user_rows = user_repo.list_by_tags([tag], limit=9999, source=source)
-            all_rows = proj_rows + user_rows
-        if query:
-            q = query.lower()
-            all_rows = [r for r in all_rows if q in r.get("content", "").lower()]
-        total = len(all_rows)
-        results = all_rows[offset:offset + limit]
-    elif exclude_tags:
-        ex_set = set(exclude_tags.split(","))
+            p_rows = repo.list_by_tags([tag], scope="project", project_dir=pdir, limit=limit, offset=offset, source=source, query=query)
+            p_total = repo.count_by_tags([tag], scope="project", project_dir=pdir, source=source, query=query)
+            u_total = user_repo.count_by_tags([tag], source=source, query=query)
+            total = p_total + u_total
+            if len(p_rows) < limit:
+                u_offset = max(0, offset - p_total)
+                u_rows = user_repo.list_by_tags([tag], limit=limit - len(p_rows), offset=u_offset, source=source, query=query)
+                results = p_rows + u_rows
+            else:
+                results = p_rows
+    elif ex_tags:
+        # SQL-level: exclude_tags + query + source filtering with pagination
         if scope == "user":
-            all_rows = user_repo.get_all(limit=9999)
+            results = user_repo.get_all(limit=limit, offset=offset, query=query, source=source, exclude_tags=ex_tags)
+            total = user_repo.count(query=query, source=source, exclude_tags=ex_tags)
         elif scope == "project":
-            all_rows = repo.get_all(limit=9999, offset=0, project_dir=pdir)
+            results = repo.get_all(limit=limit, offset=offset, project_dir=pdir, query=query, source=source, exclude_tags=ex_tags)
+            total = repo.count(project_dir=pdir, query=query, source=source, exclude_tags=ex_tags)
         else:
-            all_rows = repo.get_all(limit=9999, offset=0) + user_repo.get_all(limit=9999)
-        all_rows = [r for r in all_rows if not ex_set.intersection(json.loads(r["tags"]) if isinstance(r["tags"], str) else (r["tags"] or []))]
-        if source:
-            all_rows = [r for r in all_rows if r.get("source", "manual") == source]
-        if query:
-            q = query.lower()
-            all_rows = [r for r in all_rows if q in r.get("content", "").lower()]
-        total = len(all_rows)
-        results = all_rows[offset:offset + limit]
+            p_rows = repo.get_all(limit=limit, offset=offset, query=query, source=source, exclude_tags=ex_tags)
+            p_total = repo.count(query=query, source=source, exclude_tags=ex_tags)
+            u_total = user_repo.count(query=query, source=source, exclude_tags=ex_tags)
+            total = p_total + u_total
+            if len(p_rows) < limit:
+                u_offset = max(0, offset - p_total)
+                u_rows = user_repo.get_all(limit=limit - len(p_rows), offset=u_offset, query=query, source=source, exclude_tags=ex_tags)
+                results = p_rows + u_rows
+            else:
+                results = p_rows
     else:
-        if query:
-            if scope == "user":
-                all_rows = user_repo.get_all(limit=9999)
-            elif scope == "project":
-                all_rows = repo.get_all(limit=9999, offset=0, project_dir=pdir)
-            else:
-                all_rows = repo.get_all(limit=9999, offset=0) + user_repo.get_all(limit=9999)
-            if source:
-                all_rows = [r for r in all_rows if r.get("source", "manual") == source]
-            q = query.lower()
-            all_rows = [r for r in all_rows if q in r.get("content", "").lower()]
-            total = len(all_rows)
-            results = all_rows[offset:offset + limit]
+        # SQL-level: query + source filtering with pagination
+        if scope == "user":
+            results = user_repo.get_all(limit=limit, offset=offset, query=query, source=source)
+            total = user_repo.count(query=query, source=source)
+        elif scope == "project":
+            results = repo.get_all(limit=limit, offset=offset, project_dir=pdir, query=query, source=source)
+            total = repo.count(project_dir=pdir, query=query, source=source)
         else:
-            if scope == "user":
-                rows = user_repo.get_all(limit=limit, offset=offset)
-                total = user_repo.count()
-            elif scope == "project":
-                rows = repo.get_all(limit=limit, offset=offset, project_dir=pdir)
-                total = repo.count(project_dir=pdir)
+            p_rows = repo.get_all(limit=limit, offset=offset, query=query, source=source)
+            p_total = repo.count(query=query, source=source)
+            u_total = user_repo.count(query=query, source=source)
+            total = p_total + u_total
+            if len(p_rows) < limit:
+                u_offset = max(0, offset - p_total)
+                u_rows = user_repo.get_all(limit=limit - len(p_rows), offset=u_offset, query=query, source=source)
+                results = p_rows + u_rows
             else:
-                rows = repo.get_all(limit=limit, offset=offset)
-                total = repo.count() + user_repo.count()
-                if len(rows) < limit:
-                    user_rows = user_repo.get_all(limit=limit - len(rows))
-                    rows = rows + user_rows
-            if source:
-                rows = [r for r in rows if r.get("source", "manual") == source]
-            results = rows
+                results = p_rows
 
     return {"memories": results, "total": total}
 
@@ -144,44 +142,45 @@ def delete_memories_batch(handler, cm, pdir):
     return {"deleted_count": len(deleted), "ids": deleted}
 
 
+def _fetch_embedding(cm, mid, vec_table):
+    import struct
+    row = cm.conn.execute(f"SELECT embedding FROM {safe_table(vec_table)} WHERE id=?", (mid,)).fetchone()
+    if not row:
+        return None
+    raw = row["embedding"]
+    if isinstance(raw, (bytes, memoryview)):
+        if len(raw) >= 4 and len(raw) % 4 == 0:
+            return list(struct.unpack(f'{len(raw)//4}f', raw))
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 def export_memories(cm, params, pdir):
     scope = params.get("scope", ["all"])[0]
     repo = MemoryRepo(cm.conn, pdir)
     user_repo = UserMemoryRepo(cm.conn)
-
-    if scope == "user":
-        memories = user_repo.get_all(limit=999999)
-        vec_table = "vec_user_memories"
-    elif scope == "project":
-        memories = repo.get_all(limit=999999, project_dir=pdir)
-        vec_table = "vec_memories"
-    else:
-        memories = repo.get_all(limit=999999) + user_repo.get_all(limit=999999)
-        vec_table = None
+    page_size = 200
 
     result = []
-    for m in memories:
-        entry = dict(m)
-        tbl = vec_table
-        if tbl is None:
-            tbl = "vec_user_memories" if user_repo.get_by_id(m["id"]) else "vec_memories"
-        row = cm.conn.execute(f"SELECT embedding FROM {safe_table(tbl)} WHERE id=?", (m["id"],)).fetchone()
-        if row:
-            raw = row["embedding"]
-            if isinstance(raw, (bytes, memoryview)):
-                import struct
-                if len(raw) >= 4 and len(raw) % 4 == 0:
-                    entry["embedding"] = list(struct.unpack(f'{len(raw)//4}f', raw))
-                else:
-                    entry["embedding"] = None
-            else:
-                try:
-                    entry["embedding"] = json.loads(raw)
-                except (json.JSONDecodeError, TypeError):
-                    entry["embedding"] = None
-        else:
-            entry["embedding"] = None
-        result.append(entry)
+    if scope in ("user", "all"):
+        total_u = user_repo.count()
+        for off in range(0, total_u, page_size):
+            for m in user_repo.get_all(limit=page_size, offset=off):
+                entry = dict(m)
+                entry["embedding"] = _fetch_embedding(cm, m["id"], "vec_user_memories")
+                result.append(entry)
+    if scope in ("project", "all"):
+        total_p = repo.count(project_dir=pdir) if scope == "project" else repo.count()
+        pd = pdir if scope == "project" else None
+        for off in range(0, total_p, page_size):
+            for m in repo.get_all(limit=page_size, offset=off, project_dir=pd):
+                entry = dict(m)
+                entry["embedding"] = _fetch_embedding(cm, m["id"], "vec_memories")
+                result.append(entry)
+
     return {"memories": result, "count": len(result), "project_dir": pdir}
 
 

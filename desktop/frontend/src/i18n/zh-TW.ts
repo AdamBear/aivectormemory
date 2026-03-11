@@ -213,6 +213,6 @@ export default {
     login: '登入', loginDesc: '登入您的 AIVectorMemory 帳戶', createAccount: '建立帳戶', createAccountDesc: '註冊新的 AIVectorMemory 帳戶',
     register: '註冊', username: '使用者名稱', usernamePlaceholder: '請輸入使用者名稱', password: '密碼', passwordPlaceholder: '請輸入密碼',
     confirmPassword: '確認密碼', confirmPasswordPlaceholder: '再次輸入密碼', fieldsRequired: '請填寫所有欄位',
-    passwordTooShort: '密碼至少 6 位', passwordMismatch: '兩次密碼不一致', noAccount: '沒有帳戶？', hasAccount: '已有帳戶？', logout: '登出',
+    passwordTooShort: '密碼至少 6 位', passwordMismatch: '兩次密碼不一致', rememberPassword: '記住密碼', noAccount: '沒有帳戶？', hasAccount: '已有帳戶？', logout: '登出',
   },
 }

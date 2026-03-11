@@ -6,6 +6,20 @@ from datetime import datetime
 
 # In-memory session store: {token: {"username": str, "created_at": float}}
 _sessions: dict[str, dict] = {}
+_SESSION_TTL = 86400  # 24 hours
+_last_cleanup = 0.0
+
+
+def _cleanup_expired():
+    """Remove expired sessions. Called periodically on verify_token."""
+    global _last_cleanup
+    now = time.time()
+    if now - _last_cleanup < 300:  # cleanup at most every 5 minutes
+        return
+    _last_cleanup = now
+    expired = [t for t, s in _sessions.items() if now - s["created_at"] > _SESSION_TTL]
+    for t in expired:
+        del _sessions[t]
 
 
 def _hash_password(password: str, salt: bytes | None = None) -> tuple[str, bytes]:
@@ -88,8 +102,12 @@ def logout(handler, read_body):
 
 def verify_token(token: str) -> str | None:
     """Return username if token is valid, else None."""
+    _cleanup_expired()
     session = _sessions.get(token)
     if not session:
+        return None
+    if time.time() - session["created_at"] > _SESSION_TTL:
+        _sessions.pop(token, None)
         return None
     return session["username"]
 

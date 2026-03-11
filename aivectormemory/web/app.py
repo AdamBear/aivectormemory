@@ -82,7 +82,7 @@ class WebHandler(SimpleHTTPRequestHandler):
         if not file_path.exists():
             self.send_error(404)
             return
-        content = file_path.read_bytes()
+        file_size = file_path.stat().st_size
         content_type = {
             ".html": "text/html; charset=utf-8",
             ".css": "text/css; charset=utf-8",
@@ -92,9 +92,14 @@ class WebHandler(SimpleHTTPRequestHandler):
         }.get(file_path.suffix, "application/octet-stream")
         self.send_response(200)
         self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", len(content))
+        self.send_header("Content-Length", file_size)
         self.end_headers()
-        self.wfile.write(content)
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(8192)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
 
     def log_message(self, format, *args):
         if self.quiet:

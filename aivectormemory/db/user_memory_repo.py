@@ -17,9 +17,10 @@ class UserMemoryRepo(BaseMemoryRepo):
         vals = [mid, content, json.dumps(tags, ensure_ascii=False), source, session_id, now, now]
         return cols, vals
 
-    def list_by_tags(self, tags: list[str], limit: int = 100, source: str | None = None,
-                     tags_mode: str = "all", **_) -> list[dict]:
-        sql, params = "SELECT * FROM user_memories WHERE 1=1", []
+    def _build_tag_filter(self, base_sql: str, tags: list[str],
+                          tags_mode: str, source: str | None = None,
+                          query: str | None = None) -> tuple[str, list]:
+        sql, params = base_sql, []
         if source:
             sql += " AND source=?"
             params.append(source)
@@ -31,18 +32,59 @@ class UserMemoryRepo(BaseMemoryRepo):
             for tag in tags:
                 sql += " AND id IN (SELECT memory_id FROM user_memory_tags WHERE tag=?)"
                 params.append(tag)
-        sql += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
+        if query:
+            sql += " AND content LIKE ?"
+            params.append(f"%{query}%")
+        return sql, params
+
+    def list_by_tags(self, tags: list[str], limit: int = 100, offset: int = 0,
+                     source: str | None = None, tags_mode: str = "all",
+                     query: str | None = None, **_) -> list[dict]:
+        sql, params = self._build_tag_filter(
+            "SELECT * FROM user_memories WHERE 1=1",
+            tags, tags_mode, source, query)
+        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
 
-    def get_all(self, limit: int = 100, offset: int = 0) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT * FROM user_memories ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (limit, offset)).fetchall()
-        return [dict(r) for r in rows]
+    def count_by_tags(self, tags: list[str], source: str | None = None,
+                      tags_mode: str = "all", query: str | None = None) -> int:
+        sql, params = self._build_tag_filter(
+            "SELECT COUNT(*) FROM user_memories WHERE 1=1",
+            tags, tags_mode, source, query)
+        return self.conn.execute(sql, params).fetchone()[0]
 
-    def count(self) -> int:
-        return self.conn.execute("SELECT COUNT(*) FROM user_memories").fetchone()[0]
+    def get_all(self, limit: int = 100, offset: int = 0, query: str | None = None,
+                source: str | None = None, exclude_tags: list[str] | None = None) -> list[dict]:
+        sql, params = "SELECT * FROM user_memories WHERE 1=1", []
+        if query:
+            sql += " AND content LIKE ?"
+            params.append(f"%{query}%")
+        if source:
+            sql += " AND source=?"
+            params.append(source)
+        if exclude_tags:
+            for tag in exclude_tags:
+                sql += " AND id NOT IN (SELECT memory_id FROM user_memory_tags WHERE tag=?)"
+                params.append(tag)
+        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def count(self, query: str | None = None, source: str | None = None,
+             exclude_tags: list[str] | None = None) -> int:
+        sql, params = "SELECT COUNT(*) FROM user_memories WHERE 1=1", []
+        if query:
+            sql += " AND content LIKE ?"
+            params.append(f"%{query}%")
+        if source:
+            sql += " AND source=?"
+            params.append(source)
+        if exclude_tags:
+            for tag in exclude_tags:
+                sql += " AND id NOT IN (SELECT memory_id FROM user_memory_tags WHERE tag=?)"
+                params.append(tag)
+        return self.conn.execute(sql, params).fetchone()[0]
 
     def get_tag_counts(self) -> dict[str, int]:
         rows = self.conn.execute(

@@ -74,6 +74,6 @@ export default {
     login: 'ログイン', loginDesc: 'AIVectorMemory アカウントにログイン', createAccount: 'アカウント作成', createAccountDesc: '新しい AIVectorMemory アカウントを登録',
     register: '登録', username: 'ユーザー名', usernamePlaceholder: 'ユーザー名を入力', password: 'パスワード', passwordPlaceholder: 'パスワードを入力',
     confirmPassword: 'パスワード確認', confirmPasswordPlaceholder: 'パスワードを再入力', fieldsRequired: 'すべての項目を入力してください',
-    passwordTooShort: 'パスワードは6文字以上', passwordMismatch: 'パスワードが一致しません', noAccount: 'アカウントをお持ちでない方', hasAccount: 'アカウントをお持ちの方', logout: 'ログアウト',
+    passwordTooShort: 'パスワードは6文字以上', passwordMismatch: 'パスワードが一致しません', rememberPassword: 'パスワードを記憶', noAccount: 'アカウントをお持ちでない方', hasAccount: 'アカウントをお持ちの方', logout: 'ログアウト',
   },
 }

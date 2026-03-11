@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
@@ -14,12 +14,25 @@ const password = ref('')
 const confirmPassword = ref('')
 const loading = ref(false)
 const error = ref('')
+const rememberMe = ref(localStorage.getItem('avm-remember') === 'true')
+
+onMounted(() => {
+  if (rememberMe.value) {
+    username.value = localStorage.getItem('avm-saved-username') || ''
+    password.value = localStorage.getItem('avm-saved-password') || ''
+  }
+})
 
 function switchMode(m: 'login' | 'register') {
   mode.value = m
   error.value = ''
-  username.value = ''
-  password.value = ''
+  if (m === 'login' && rememberMe.value) {
+    username.value = localStorage.getItem('avm-saved-username') || ''
+    password.value = localStorage.getItem('avm-saved-password') || ''
+  } else {
+    username.value = ''
+    password.value = ''
+  }
   confirmPassword.value = ''
 }
 
@@ -50,6 +63,15 @@ async function handleSubmit() {
       await authStore.register(user, pass)
     } else {
       await authStore.login(user, pass)
+    }
+    if (rememberMe.value) {
+      localStorage.setItem('avm-remember', 'true')
+      localStorage.setItem('avm-saved-username', user)
+      localStorage.setItem('avm-saved-password', pass)
+    } else {
+      localStorage.removeItem('avm-remember')
+      localStorage.removeItem('avm-saved-username')
+      localStorage.removeItem('avm-saved-password')
     }
     router.replace('/')
   } catch (e: any) {
@@ -103,6 +125,11 @@ async function handleSubmit() {
           <label class="form-label">{{ t('auth.confirmPassword') }}</label>
           <input v-model="confirmPassword" class="form-input" type="password" :placeholder="t('auth.confirmPasswordPlaceholder')" autocomplete="new-password" />
         </div>
+
+        <label v-if="mode === 'login'" class="remember-check">
+          <input v-model="rememberMe" type="checkbox" />
+          <span>{{ t('auth.rememberPassword') }}</span>
+        </label>
 
         <button class="btn btn-primary btn-full" type="submit" :disabled="loading">
           {{ loading ? '...' : (mode === 'login' ? t('auth.login') : t('auth.createAccount')) }}
@@ -193,6 +220,12 @@ async function handleSubmit() {
 
 .btn-link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 13px; padding: 0; }
 .btn-link:hover { text-decoration: underline; }
+
+.remember-check {
+  display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted);
+  cursor: pointer; margin-top: 4px; margin-bottom: 4px; user-select: none;
+}
+.remember-check input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
 .auth-switch { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 20px; }
 </style>

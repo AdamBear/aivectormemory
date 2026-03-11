@@ -240,6 +240,7 @@ export default {
     fieldsRequired: '请填写所有字段',
     passwordTooShort: '密码至少 6 位',
     passwordMismatch: '两次密码不一致',
+    rememberPassword: '记住密码',
     noAccount: '没有账户？',
     hasAccount: '已有账户？',
     logout: '退出登录',

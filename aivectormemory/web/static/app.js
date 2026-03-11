@@ -1480,8 +1480,11 @@ function renderAuthForm() {
   $('#auth-submit').textContent = t(isLogin ? 'auth.login' : 'auth.createAccount');
   $('#auth-confirm-group').style.display = isLogin ? 'none' : '';
   $('#auth-error').style.display = 'none';
-  $('#auth-username').value = '';
-  $('#auth-password').value = '';
+  const remembered = localStorage.getItem('avm-remember') === 'true';
+  $('#auth-remember').checked = remembered;
+  $('#auth-remember-group').style.display = isLogin ? '' : 'none';
+  $('#auth-username').value = (isLogin && remembered) ? (localStorage.getItem('avm-saved-username') || '') : '';
+  $('#auth-password').value = (isLogin && remembered) ? (localStorage.getItem('avm-saved-password') || '') : '';
   $('#auth-confirm-password').value = '';
   $('#auth-switch').innerHTML = isLogin
     ? `${t('auth.noAccount')} <button class="btn-link" onclick="switchAuthMode('register')">${t('auth.register')}</button>`
@@ -1534,6 +1537,15 @@ $('#auth-form').addEventListener('submit', async (e) => {
   authToken = res.token;
   localStorage.setItem('avm-token', authToken);
   localStorage.setItem('avm-username', username);
+  if ($('#auth-remember').checked) {
+    localStorage.setItem('avm-remember', 'true');
+    localStorage.setItem('avm-saved-username', username);
+    localStorage.setItem('avm-saved-password', password);
+  } else {
+    localStorage.removeItem('avm-remember');
+    localStorage.removeItem('avm-saved-username');
+    localStorage.removeItem('avm-saved-password');
+  }
   updateSidebarUser(username);
   updateProjectSelectUser(username);
   hideAuthPage();

@@ -236,6 +236,7 @@ export default {
     fieldsRequired: 'All fields are required',
     passwordTooShort: 'Password must be at least 6 characters',
     passwordMismatch: 'Passwords do not match',
+    rememberPassword: 'Remember password',
     noAccount: "Don't have an account?",
     hasAccount: 'Already have an account?',
     logout: 'Logout',
