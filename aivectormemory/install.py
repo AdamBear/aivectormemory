@@ -3,7 +3,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from aivectormemory.i18n import get_steering, get_workflow_prompt
+from aivectormemory.i18n import get_steering, get_workflow_prompt, get_compact_recovery_hints
 
 # (IDE名, MCP配置路径, MCP格式, 是否全局, Steering路径, Steering写入方式, Hooks目录)
 # steering_mode: "file"=独立文件 "append"=追加到已有文件 None=不写Steering
@@ -95,6 +95,28 @@ CLAUDE_CODE_HOOKS_CONFIG = {
                     {
                         "type": "command",
                         "command": "",  # 占位，install 时动态填充 inject-workflow-rules.sh 路径
+                    }
+                ]
+            }
+        ],
+        "SessionStart": [
+            {
+                "matcher": "startup|compact|resume|clear",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "",  # 占位，install 时动态填充 compact-recovery.sh 路径
+                    }
+                ]
+            }
+        ],
+        "TaskCompleted": [
+            {
+                "hooks": [
+                    {
+                        "type": "agent",
+                        "prompt": "你是自测检查员。检查当前会话中是否有文件被修改（Edit/Write工具调用），如果有，检查修改后是否执行了相关测试（Bash工具调用中包含 pytest、curl、go test、playwright、npm run 等测试命令）。如果有文件修改但未执行任何测试，返回 {\"ok\": false, \"reason\": \"有文件被修改但未执行自测，禁止标记任务完成。请先运行相关测试验证功能正确性。\"}。如果已执行测试或没有文件修改，返回 {\"ok\": true}。",
+                        "timeout": 60,
                     }
                 ]
             }
@@ -191,12 +213,13 @@ def _copy_check_track_script(target_dir: Path) -> tuple[Path, bool]:
     return dst, False
 
 
-def _build_claude_code_hooks(check_script_path: str, inject_script_path: str) -> dict:
+def _build_claude_code_hooks(check_script_path: str, inject_script_path: str, compact_recovery_path: str) -> dict:
     """构建 Claude Code hooks 配置，填充实际脚本路径"""
     import copy
     cfg = copy.deepcopy(CLAUDE_CODE_HOOKS_CONFIG)
     cfg["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = check_script_path
     cfg["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] = inject_script_path
+    cfg["hooks"]["SessionStart"][0]["hooks"][0]["command"] = compact_recovery_path
     return cfg
 
 
@@ -217,6 +240,35 @@ def _write_inject_workflow_script(target_dir: Path, lang: str | None = None) -> 
     return dst, True
 
 
+def _write_compact_recovery_script(target_dir: Path, lang: str | None = None) -> tuple[Path, bool]:
+    """生成 compact-recovery.sh，上下文压缩后重新注入关键规则。使用相对路径引用同目录的 inject-workflow-rules.sh 和项目根目录的 CLAUDE.md"""
+    from aivectormemory.settings import get_language
+    if lang is None:
+        lang = get_language()
+    header, separator = get_compact_recovery_hints(lang)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    dst = target_dir / "compact-recovery.sh"
+    content = f"""#!/bin/bash
+# compact-recovery: re-inject critical rules after context compression
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+echo "{header}"
+echo ""
+sed '1d;/^cat <<.*AIVECTORMEMORY_EOF/d;/^AIVECTORMEMORY_EOF$/d' "$SCRIPT_DIR/inject-workflow-rules.sh"
+echo ""
+echo "{separator}"
+echo ""
+if [ -f "$PROJECT_DIR/CLAUDE.md" ]; then
+  cat "$PROJECT_DIR/CLAUDE.md"
+fi
+"""
+    if dst.exists() and dst.read_text("utf-8") == content:
+        return dst, False
+    dst.write_text(content, encoding="utf-8")
+    dst.chmod(0o755)
+    return dst, True
+
+
 def _write_claude_code_hooks(hooks_dir: Path, lang: str | None = None) -> list[str]:
     """写入 Claude Code hooks 到 .claude/settings.json"""
     results = []
@@ -228,8 +280,11 @@ def _write_claude_code_hooks(hooks_dir: Path, lang: str | None = None) -> list[s
     # 生成 inject-workflow-rules.sh
     inject_path, inject_changed = _write_inject_workflow_script(script_dir, lang=lang)
     results.append(f"{'✓ 已同步' if inject_changed else '- 无变更'}  Script: .claude/hooks/inject-workflow-rules.sh")
+    # 生成 compact-recovery.sh
+    compact_path, compact_changed = _write_compact_recovery_script(script_dir, lang=lang)
+    results.append(f"{'✓ 已同步' if compact_changed else '- 无变更'}  Script: .claude/hooks/compact-recovery.sh")
     # 构建配置
-    new_hooks_cfg = _build_claude_code_hooks(str(check_path), str(inject_path))
+    new_hooks_cfg = _build_claude_code_hooks(str(check_path), str(inject_path), str(compact_path))
     filepath = hooks_dir / "settings.json"
     config = {}
     if filepath.exists():
@@ -239,19 +294,19 @@ def _write_claude_code_hooks(hooks_dir: Path, lang: str | None = None) -> list[s
             config = {}
     existing = config.get("hooks", {})
     new_hooks = new_hooks_cfg["hooks"]
-    changed = (existing.get("PreToolUse") != new_hooks.get("PreToolUse")
-               or existing.get("UserPromptSubmit") != new_hooks.get("UserPromptSubmit"))
+    hook_keys = ["PreToolUse", "UserPromptSubmit", "SessionStart", "TaskCompleted"]
+    changed = any(existing.get(k) != new_hooks.get(k) for k in hook_keys)
     # 清理旧的 Stop hook
     has_old_stop = "Stop" in existing
     if changed or has_old_stop:
         config.setdefault("hooks", {})
-        config["hooks"]["PreToolUse"] = new_hooks["PreToolUse"]
-        config["hooks"]["UserPromptSubmit"] = new_hooks["UserPromptSubmit"]
+        for k in hook_keys:
+            config["hooks"][k] = new_hooks[k]
         config["hooks"].pop("Stop", None)
         filepath.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        results.append("✓ 已生成  Hook: .claude/settings.json (PreToolUse + UserPromptSubmit)")
+        results.append(f"✓ 已生成  Hook: .claude/settings.json ({' + '.join(hook_keys)})")
     else:
-        results.append("- 无变更  Hook: .claude/settings.json (PreToolUse + UserPromptSubmit)")
+        results.append(f"- 无变更  Hook: .claude/settings.json ({' + '.join(hook_keys)})")
     return results
 
 

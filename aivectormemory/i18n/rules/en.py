@@ -260,3 +260,8 @@ DEV_WORKFLOW_PROMPT = (
     "> Must think rigorously before any file modification.\n"
     "> When encountering errors or exceptions, never test blindly. Must analyze the root cause."
 )
+
+COMPACT_RECOVERY_HINTS = (
+    "⚠️ Context has been compressed. The following are critical rules that MUST be strictly followed:",
+    "--- The following are the project's complete work rules that MUST be strictly followed ---",
+)

@@ -260,3 +260,8 @@ DEV_WORKFLOW_PROMPT = (
     "> Debe pensar rigurosamente antes de cualquier modificación de archivo.\n"
     "> Al encontrar errores o excepciones, nunca testear a ciegas. Debe analizar la causa raíz."
 )
+
+COMPACT_RECOVERY_HINTS = (
+    "⚠️ El contexto ha sido comprimido. Las siguientes son reglas críticas que DEBEN seguirse estrictamente:",
+    "--- Las siguientes son las reglas de trabajo completas del proyecto que DEBEN seguirse estrictamente ---",
+)

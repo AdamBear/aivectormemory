@@ -32,3 +32,9 @@ def get_workflow_prompt(lang: str = None) -> str:
     """返回指定语言的 DEV_WORKFLOW_PROMPT"""
     lang = lang or get_language()
     return _load_module(lang).DEV_WORKFLOW_PROMPT
+
+
+def get_compact_recovery_hints(lang: str = None) -> tuple[str, str]:
+    """返回指定语言的 compact recovery 提示文本 (header, separator)"""
+    lang = lang or get_language()
+    return _load_module(lang).COMPACT_RECOVERY_HINTS

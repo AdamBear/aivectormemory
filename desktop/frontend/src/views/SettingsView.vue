@@ -239,11 +239,11 @@ function formatSize(bytes: number): string {
         <div v-if="health" class="health-grid">
           <div class="health-item">
             <span>{{ t('memoriesConsistency') }}</span>
-            <Badge :type="health.memories_total === health.vec_memories_total ? 'success' : 'warning'">{{ health.memories_total === health.vec_memories_total ? 'OK' : 'Mismatch' }}</Badge>
+            <Badge :type="!(health.memories_missing || 0) && !(health.orphan_vec || 0) ? 'success' : 'warning'">{{ !(health.memories_missing || 0) && !(health.orphan_vec || 0) ? 'OK' : 'Mismatch' }}</Badge>
           </div>
           <div class="health-item">
             <span>{{ t('userMemoriesConsistency') }}</span>
-            <Badge :type="health.user_memories_total === health.vec_user_memories_total ? 'success' : 'warning'">{{ health.user_memories_total === health.vec_user_memories_total ? 'OK' : 'Mismatch' }}</Badge>
+            <Badge :type="!(health.user_memories_missing || 0) && !(health.orphan_user_vec || 0) ? 'success' : 'warning'">{{ !(health.user_memories_missing || 0) && !(health.orphan_user_vec || 0) ? 'OK' : 'Mismatch' }}</Badge>
           </div>
           <div class="health-item">
             <span>{{ t('missingEmbeddings') }}</span>
