@@ -105,9 +105,10 @@ STEERING_CONTENT = """# AIVectorMemory - Workflow-Regeln
 
 ## 5. Vor-Operations-Prüfungen
 
+**Wenn Projektinformationen benötigt werden** (Serveradresse, Passwort, Deployment-Konfiguration, technische Entscheidungen usw.): **zuerst `recall` verwenden um das Gedächtnissystem abzufragen**, wenn nicht gefunden dann in Code/Konfigurationsdateien suchen, nur als letztes Mittel den Benutzer fragen. Verboten recall zu überspringen und den Benutzer direkt zu fragen
 **Vor Code-Änderung**: `recall` um Stolperfallen-Einträge zu prüfen + bestehende Implementierung überprüfen + Datenfluss bestätigen
 **Nach Code-Änderung**: Tests zur Verifizierung ausführen + bestätigen dass andere Funktionen nicht betroffen sind
-**Vor jeder potenziell riskanten Operation** (Dashboard-Start, PyPI-Veröffentlichung, Service-Neustart usw.): `recall` (query: Operations-Schlüsselwörter, tags: ["Stolperfalle"]) um Stolperfallen-Einträge zu prüfen, Standardverfahren aus dem Gedächtnis befolgen
+**Vor der Ausführung von Operationen**: `recall` (query: operationsbezogene Schlüsselwörter, tags: ["Stolperfalle"]) um verwandte Stolperfallen-Einträge zu prüfen. Falls gefunden, den korrekten Ansatz aus dem Gedächtnis befolgen, um wiederholte Fehler zu vermeiden
 
 ---
 
@@ -238,7 +239,8 @@ DEV_WORKFLOW_PROMPT = (
     "3. **Keine mündlichen Versprechen — alles wird durch bestandene Tests validiert**.\n"
     "4. **Muss Code überprüfen und rigoros nachdenken vor jeder Dateiänderung**.\n"
     "5. **Während Entwicklung und Selbsttest niemals den Benutzer bitten manuell zu operieren. Selbst machen wenn möglich**.\n"
-    "6. **Wenn der Benutzer das Lesen einer Datei anfordert, niemals mit \"bereits gelesen\" oder \"bereits im Kontext\" überspringen. Muss das Werkzeug aufrufen um den neuesten Inhalt zu lesen**.\n\n"
+    "6. **Wenn der Benutzer das Lesen einer Datei anfordert, niemals mit \"bereits gelesen\" oder \"bereits im Kontext\" überspringen. Muss das Werkzeug aufrufen um den neuesten Inhalt zu lesen**.\n"
+    "7. **Wenn Projektinformationen benötigt werden (Serveradresse, Passwort, Deployment-Konfiguration, technische Entscheidungen usw.), zuerst `recall` verwenden um das Gedächtnissystem abzufragen. Wenn nicht gefunden, in Code/Konfigurationsdateien suchen. Nur als letztes Mittel den Benutzer fragen. Verboten recall zu überspringen und den Benutzer direkt zu fragen**.\n\n"
     "---\n\n"
     "## ⚠️ IDE-Einfrieren-Prävention\n\n"
     "- **Keine** `$(...)` + Pipe-Kombinationen\n"
@@ -263,5 +265,5 @@ DEV_WORKFLOW_PROMPT = (
 
 COMPACT_RECOVERY_HINTS = (
     "⚠️ Der Kontext wurde komprimiert. Die folgenden kritischen Regeln MÜSSEN strikt befolgt werden:",
-    "--- Die folgenden sind die vollständigen Arbeitsregeln des Projekts, die strikt befolgt werden MÜSSEN ---",
+    "⚠️ Die vollständigen Arbeitsregeln der CLAUDE.md gelten weiterhin und MÜSSEN strikt befolgt werden.\nSie MÜSSEN erneut ausführen: recall + status Initialisierung, Blockierungsstatus bestätigen bevor Sie fortfahren.",
 )

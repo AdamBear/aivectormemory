@@ -10,7 +10,8 @@ if [ ! -f "$DB_PATH" ]; then
   exit 0
 fi
 
-PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="${PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
 # 定义 SQL 执行函数：优先 sqlite3 命令，fallback 到 Python 内置 sqlite3 模块
 if command -v sqlite3 &>/dev/null; then

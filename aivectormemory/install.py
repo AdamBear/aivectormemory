@@ -241,26 +241,22 @@ def _write_inject_workflow_script(target_dir: Path, lang: str | None = None) -> 
 
 
 def _write_compact_recovery_script(target_dir: Path, lang: str | None = None) -> tuple[Path, bool]:
-    """生成 compact-recovery.sh，上下文压缩后重新注入关键规则。使用相对路径引用同目录的 inject-workflow-rules.sh 和项目根目录的 CLAUDE.md"""
+    """生成 compact-recovery.sh，上下文压缩后重新注入关键规则（CLAUDE.md 始终自动加载，无需重复注入）"""
     from aivectormemory.settings import get_language
     if lang is None:
         lang = get_language()
-    header, separator = get_compact_recovery_hints(lang)
+    header, footer = get_compact_recovery_hints(lang)
     target_dir.mkdir(parents=True, exist_ok=True)
     dst = target_dir / "compact-recovery.sh"
+    # footer 可能含 \n，bash echo 双引号内的换行会正常输出
     content = f"""#!/bin/bash
-# compact-recovery: re-inject critical rules after context compression
+# compact-recovery: re-inject critical rules after context compression (CLAUDE.md auto-loaded)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 echo "{header}"
 echo ""
 sed '1d;/^cat <<.*AIVECTORMEMORY_EOF/d;/^AIVECTORMEMORY_EOF$/d' "$SCRIPT_DIR/inject-workflow-rules.sh"
 echo ""
-echo "{separator}"
-echo ""
-if [ -f "$PROJECT_DIR/CLAUDE.md" ]; then
-  cat "$PROJECT_DIR/CLAUDE.md"
-fi
+echo "{footer}"
 """
     if dst.exists() and dst.read_text("utf-8") == content:
         return dst, False

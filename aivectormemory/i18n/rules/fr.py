@@ -105,9 +105,10 @@ STEERING_CONTENT = """# AIVectorMemory - Règles de Flux de Travail
 
 ## 5. Vérifications Pré-opération
 
+**Quand des informations projet sont nécessaires** (adresse serveur, mot de passe, configuration de déploiement, décisions techniques, etc.) : **d'abord `recall` pour interroger le système de mémoire**, si non trouvé chercher dans le code/fichiers de configuration, ne demander à l'utilisateur qu'en dernier recours. Interdit de sauter recall et demander directement à l'utilisateur
 **Avant modification du code** : `recall` pour vérifier les entrées de pièges + examiner l'implémentation existante + confirmer le flux de données
 **Après modification du code** : exécuter les tests pour vérifier + confirmer qu'il n'y a pas d'impact sur d'autres fonctions
-**Avant toute opération potentiellement risquée** (démarrage du dashboard, publication PyPI, redémarrage de service, etc.) : `recall` (query: mots-clés d'opération, tags: ["piège"]) pour vérifier les entrées de pièges, suivre la procédure standard de mémoire
+**Avant d'exécuter des opérations** : `recall` (query: mots-clés liés à l'opération, tags: ["piège"]) pour vérifier s'il y a des entrées de pièges associées. Si trouvées, suivre l'approche correcte de la mémoire pour éviter de répéter les erreurs
 
 ---
 
@@ -238,7 +239,8 @@ DEV_WORKFLOW_PROMPT = (
     "3. **Pas de promesses verbales — tout est validé par des tests qui passent**.\n"
     "4. **Doit examiner le code et réfléchir rigoureusement avant toute modification de fichier**.\n"
     "5. **Pendant le développement et l'auto-test, ne jamais demander à l'utilisateur d'opérer manuellement. Le faire soi-même si possible**.\n"
-    "6. **Lorsque l'utilisateur demande de lire un fichier, ne jamais sauter en prétextant \"déjà lu\" ou \"déjà dans le contexte\". Doit appeler l'outil pour lire le contenu le plus récent**.\n\n"
+    "6. **Lorsque l'utilisateur demande de lire un fichier, ne jamais sauter en prétextant \"déjà lu\" ou \"déjà dans le contexte\". Doit appeler l'outil pour lire le contenu le plus récent**.\n"
+    "7. **Lorsque des informations projet sont nécessaires (adresse serveur, mot de passe, configuration de déploiement, décisions techniques, etc.), d'abord `recall` pour interroger le système de mémoire. Si non trouvé, chercher dans le code/fichiers de configuration. Ne demander à l'utilisateur qu'en dernier recours. Interdit de sauter recall et demander directement à l'utilisateur**.\n\n"
     "---\n\n"
     "## ⚠️ Prévention de Gel de l'IDE\n\n"
     "- **Pas de** combinaisons `$(...)` + pipe\n"
@@ -263,5 +265,5 @@ DEV_WORKFLOW_PROMPT = (
 
 COMPACT_RECOVERY_HINTS = (
     "⚠️ Le contexte a été compressé. Les règles critiques suivantes DOIVENT être strictement respectées :",
-    "--- Les règles de travail complètes du projet suivantes DOIVENT être strictement respectées ---",
+    "⚠️ Les règles de travail complètes de CLAUDE.md restent en vigueur et DOIVENT être strictement respectées.\nVous DEVEZ réexécuter : recall + status initialisation, confirmer l'état de blocage avant de continuer.",
 )

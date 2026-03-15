@@ -359,6 +359,23 @@ O agregar env en la configuración MCP:
 
 ## 📋 Registro de Cambios
 
+### v2.0.2
+
+**Mejora: Generalización de Reglas & Corrección de Versión del Escritorio**
+- 📏 Nueva regla "recall antes de preguntar al usuario" — la IA debe consultar el sistema de memoria antes de preguntar al usuario por información del proyecto (dirección del servidor, contraseñas, configuración de despliegue, etc.)
+- 📏 Regla de verificación pre-operación generalizada — se eliminaron ejemplos específicos para aplicar a todos los escenarios
+- 🖥️ Corregida la página de configuración del escritorio que mostraba versión "1.0.0" codificada en vez de la versión real
+- 🌐 Reglas de dirección y prompts de flujo de trabajo sincronizados en los 7 idiomas
+
+### v2.0.1
+
+**Corrección: Compatibilidad de Hooks entre proyectos**
+- 🔧 `check_track.sh` ahora deriva la ruta del proyecto desde la ubicación del script en vez de `$(pwd)`, corrigiendo fallos de detección de track cuando Claude Code ejecuta hooks desde un directorio diferente
+- 🔧 `compact-recovery.sh` ahora usa derivación de ruta relativa en vez de rutas absolutas codificadas
+- 🔧 Eliminada la reinyección redundante de CLAUDE.md en compact-recovery (ya se carga automáticamente)
+- 🔧 Plantilla de `install.py` sincronizada con todas las correcciones de hooks
+- 🌐 Textos de compact-recovery actualizados en los 7 idiomas
+
 ### v2.0
 
 **Rendimiento: Cuantización ONNX INT8**

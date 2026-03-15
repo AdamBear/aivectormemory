@@ -105,9 +105,10 @@ STEERING_CONTENT = """# AIVectorMemory - Workflow Rules
 
 ## 5. Pre-operation Checks
 
+**When project information is needed** (server address, password, deployment config, technical decisions, etc.): **must `recall` to query the memory system first**, if not found then search code/config files, only ask user as last resort. Never skip recall and ask user directly
 **Before code modification**: `recall` to check pitfall records + review existing implementation + confirm data flow
 **After code modification**: run tests to verify + confirm no impact on other features
-**Before any potentially risky operation** (dashboard startup, PyPI publish, service restart, etc.): `recall` (query: operation keywords, tags: ["pitfall"]) to check pitfall records, follow standard procedure from memory
+**Before executing operations**: `recall` (query: operation-related keywords, tags: ["pitfall"]) to check for related pitfall records. If found, follow the correct approach from memory to avoid repeating mistakes
 
 ---
 
@@ -238,7 +239,8 @@ DEV_WORKFLOW_PROMPT = (
     "3. **No verbal promises — everything is validated by passing tests**.\n"
     "4. **Must review code and think rigorously before any file modification**.\n"
     "5. **During development and self-testing, never ask the user to manually operate. Do it yourself if possible**.\n"
-    "6. **When user requests to read a file, never skip by claiming \"already read\" or \"already in context\". Must call the tool to read the latest content**.\n\n"
+    "6. **When user requests to read a file, never skip by claiming \"already read\" or \"already in context\". Must call the tool to read the latest content**.\n"
+    "7. **When project information is needed (server address, password, deployment config, technical decisions, etc.), must `recall` to query the memory system first. If not found, search code/config files. Only ask user as last resort. Never skip recall and ask user directly**.\n\n"
     "---\n\n"
     "## ⚠️ IDE Freeze Prevention\n\n"
     "- **No** `$(...)` + pipe combinations\n"
@@ -263,5 +265,5 @@ DEV_WORKFLOW_PROMPT = (
 
 COMPACT_RECOVERY_HINTS = (
     "⚠️ Context has been compressed. The following are critical rules that MUST be strictly followed:",
-    "--- The following are the project's complete work rules that MUST be strictly followed ---",
+    "⚠️ CLAUDE.md complete work rules remain in effect and MUST be strictly followed.\nYou MUST re-run: recall + status initialization, confirm block status before continuing.",
 )

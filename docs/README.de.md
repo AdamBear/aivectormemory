@@ -359,6 +359,23 @@ Oder env in der MCP-Konfiguration hinzufügen:
 
 ## 📋 Änderungsprotokoll
 
+### v2.0.2
+
+**Verbesserung: Regelverallgemeinerung & Desktop-Versionsanzeige-Fix**
+- 📏 Neue Regel „recall vor Benutzerfrage" — KI muss das Gedächtnissystem abfragen bevor sie den Benutzer nach Projektinformationen fragt (Serveradresse, Passwörter, Deployment-Konfiguration usw.)
+- 📏 Vor-Operations-Prüfungsregel verallgemeinert — spezifische Beispiele entfernt, gilt für alle Szenarien
+- 🖥️ Desktop-App Einstellungsseite zeigte hartcodierte Version "1.0.0" statt der tatsächlichen Version — behoben
+- 🌐 Steuerungsregeln und Workflow-Prompts in allen 7 Sprachen synchronisiert
+
+### v2.0.1
+
+**Fix: Hook-Kompatibilität über Projekte hinweg**
+- 🔧 `check_track.sh` leitet den Projektpfad nun vom Skriptstandort ab statt von `$(pwd)`, behebt Track-Erkennungsfehler wenn Claude Code Hooks aus einem anderen Arbeitsverzeichnis ausführt
+- 🔧 `compact-recovery.sh` verwendet nun relative Pfadableitung statt hartcodierter absoluter Pfade
+- 🔧 Redundante CLAUDE.md-Reinjektion aus compact-recovery entfernt (wird bereits automatisch geladen)
+- 🔧 `install.py`-Vorlage mit allen Hook-Fixes synchronisiert
+- 🌐 Compact-Recovery-Hinweistexte in allen 7 Sprachen aktualisiert
+
 ### v2.0
 
 **Leistung: ONNX INT8-Quantisierung**

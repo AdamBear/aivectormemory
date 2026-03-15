@@ -359,6 +359,23 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ## 📋 更新日誌
 
+### v2.0.2
+
+**增強：規則通用化 & 桌面端版本顯示修復**
+- 📏 新增「recall 優先於詢問使用者」規則 — AI 在詢問使用者專案資訊（伺服器地址、密碼、部署配置等）前必須先查詢記憶系統
+- 📏 操作前檢查規則通用化 — 移除具體舉例，適用於所有操作場景
+- 🖥️ 修復桌面端設定頁版本號硬編碼為 "1.0.0" 的問題，改為動態取得實際版本
+- 🌐 7 種語言 i18n 引導規則和工作流提示同步更新
+
+### v2.0.1
+
+**修復：Hook 跨專案相容性**
+- 🔧 `check_track.sh` 改為從腳本自身位置推導專案路徑，修復 Claude Code 從非根目錄執行 hook 時 track 偵測失敗的問題
+- 🔧 `compact-recovery.sh` 改為相對路徑推導，修復安裝到其他專案後路徑指向錯誤專案的問題
+- 🔧 移除 compact-recovery 中冗餘的 CLAUDE.md 重複注入（Claude Code 已自動載入）
+- 🔧 `install.py` 範本同步所有 hook 修復
+- 🌐 7 種語言 i18n compact-recovery 提示文字更新
+
 ### v2.0
 
 **效能優化：ONNX INT8 量化**

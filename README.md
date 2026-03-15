@@ -365,6 +365,23 @@ Or add env to MCP config:
 
 ## 📋 Changelog
 
+### v2.0.2
+
+**Enhancement: Rule Generalization & Desktop Version Fix**
+- 📏 Added "recall before asking user" rule — AI must query memory system before asking user for project information (server address, passwords, deploy config, etc.)
+- 📏 Generalized pre-operation check rule — removed specific examples to apply to all operation scenarios
+- 🖥️ Fixed desktop app settings page showing hardcoded version "1.0.0" instead of actual app version
+- 🌐 All 7 language i18n steering rules and workflow prompts synchronized
+
+### v2.0.1
+
+**Fix: Hook Cross-Project Compatibility**
+- 🔧 `check_track.sh` now derives project path from script location instead of `$(pwd)`, fixing track detection failure when Claude Code runs hooks from non-root working directory
+- 🔧 `compact-recovery.sh` now uses relative path derivation instead of hardcoded absolute paths, ensuring correct behavior when installed to any project
+- 🔧 Removed redundant CLAUDE.md re-injection from compact-recovery (already auto-loaded by Claude Code)
+- 🔧 `install.py` template synchronized with all hook fixes
+- 🌐 All 7 language i18n compact-recovery hints updated
+
 ### v2.0
 
 **Performance: ONNX INT8 Quantization**
